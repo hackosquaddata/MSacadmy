@@ -10,9 +10,12 @@ dotenv.config({
 
 const app =express()
 
+// Update CORS configuration
 app.use(cors({
-    origin:process.env.ORIGIN,
-    credentials:true    
+    origin: 'http://localhost:5173', // Your frontend URL
+    credentials:true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
 }))
 
 app.use(express.json({limit:"16kb"}))
@@ -33,6 +36,7 @@ app.get("/",(req,res)=>{
 
 import userRouter from "./routes/User.routes.js"
 
+app.use("/api/auth/v1",userRouter)
 app.use("/api/auth/v1",userRouter)
 
 app.listen((process.env.PORT||3000),()=>{
