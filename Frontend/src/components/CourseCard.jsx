@@ -3,10 +3,20 @@ import {
   UserGroupIcon,
   ClockIcon
 } from '@heroicons/react/24/solid';
+import { useNavigate } from 'react-router-dom';
 
 export default function CourseCard({ course, onEnroll, isEnrolled }) {
+  const navigate = useNavigate();
+
+  const handleClick = () => {
+    navigate(`/course/${course.id}`);
+  };
+
   return (
-    <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-all duration-300">
+    <div 
+      className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer"
+      onClick={handleClick}
+    >
       <img 
         src={course.thumbnail} 
         alt={course.title}
