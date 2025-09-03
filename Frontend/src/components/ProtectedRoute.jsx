@@ -18,7 +18,8 @@ export default function ProtectedRoute({ children }) {
         // Verify token with backend
         const response = await fetch('http://localhost:3000/api/auth/v1/me', {
           headers: {
-            'Authorization': `Bearer ${token}`
+             "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`, // important
           }
         });
 

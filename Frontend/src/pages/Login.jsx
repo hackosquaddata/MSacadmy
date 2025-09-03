@@ -27,22 +27,25 @@ export default function Login() {
 
       const data = await response.json();
       console.log("Login response:", data); // Debug log
+if (response.ok && data.user) {
+  // Store the token from the correct location in response
+  localStorage.setItem(
+    "token",
+    data.session?.access_token || data.access_token || data.token
+  );
 
-      if (response.ok && data.user) {
-        // Store the token from the correct location in response
-        localStorage.setItem(
-          "token",
-          data.session?.access_token || data.access_token || data.token
-        );
+  // Store user data
+  localStorage.setItem("user", JSON.stringify(data.user));
 
-        // Store user data
-        localStorage.setItem("user", JSON.stringify(data.user));
-
-        // Navigate to dashboard
-        navigate("/dashboard/*");
-      } else {
-        setError(data.error || "Invalid email or password");
-      }
+  // Navigate based on admin status
+  if (data.user.is_admin) {
+    navigate("/admin/dashboard");
+  } else {
+    navigate("/dashboard");
+  }
+} else {
+  setError(data.error || "Invalid email or password");
+}
     } catch (err) {
       console.error("Login error:", err);
       setError("Something went wrong. Please try again.");
