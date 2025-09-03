@@ -30,7 +30,7 @@ const supabase = connectSupabase()
             id:data.user.id,
             email:data.user.email,
             full_name:full_name,
-            role:"student"
+            is_admin:false,
         }])
         
         if(dbError) return res.status(500).json({error:dbError.message})
@@ -60,14 +60,23 @@ const loginUser = async (req, res) => {
       password,
     });
 
-    if (error) {
-      return res.status(400).json({ error: error.message });
+    if (error || !data.session) {
+      return res.status(400).json({ error: error?.message || "Login failed" });
     }
 
-    // Response contains session + access token (JWT)
+    // Fetch user from 'users' table to get is_admin and other custom fields
+    const { data: userData, error: dbError } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", data.user.id)
+      .single();
+
+    if (dbError) return res.status(500).json({ error: dbError.message });
+
+    // Return combined response
     res.status(200).json({
       message: "Login successful",
-      user: data.user,
+      user: userData,                 // ✅ includes is_admin
       access_token: data.session.access_token,
       refresh_token: data.session.refresh_token,
     });

@@ -35,8 +35,10 @@ app.get("/",(req,res)=>{
 })
 
 import userRouter from "./routes/User.routes.js"
+import Adminrouter from "./routes/Admin.routes.js"
 
 app.use("/api/auth/v1",userRouter)
+app.use("/api/admin/",Adminrouter)
 
 app.listen((process.env.PORT||3000),()=>{
 
