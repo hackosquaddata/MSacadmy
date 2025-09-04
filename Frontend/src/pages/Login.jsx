@@ -26,26 +26,24 @@ export default function Login() {
       });
 
       const data = await response.json();
-      console.log("Login response:", data); // Debug log
-if (response.ok && data.user) {
-  // Store the token from the correct location in response
-  localStorage.setItem(
-    "token",
-    data.session?.access_token || data.access_token || data.token
-  );
+      console.log("Login response:", data);
 
-  // Store user data
-  localStorage.setItem("user", JSON.stringify(data.user));
+      if (response.ok && data.user) {
+        // ✅ Store token from session
+        localStorage.setItem("token", data.session?.access_token);
 
-  // Navigate based on admin status
-  if (data.user.is_admin) {
-    navigate("/admin/dashboard");
-  } else {
-    navigate("/dashboard");
-  }
-} else {
-  setError(data.error || "Invalid email or password");
-}
+        // ✅ Store user data
+        localStorage.setItem("user", JSON.stringify(data.user));
+
+        // ✅ Navigate based on admin status
+        if (data.user.is_admin) {
+          navigate("/admin/dashboard");
+        } else {
+          navigate("/dashboard");
+        }
+      } else {
+        setError(data.error || "Invalid email or password");
+      }
     } catch (err) {
       console.error("Login error:", err);
       setError("Something went wrong. Please try again.");
@@ -118,10 +116,7 @@ if (response.ok && data.user) {
             </button>
           </div>
           <div className="text-center">
-            <Link
-              to="/signup"
-              className="text-blue-600 hover:text-blue-500"
-            >
+            <Link to="/signup" className="text-blue-600 hover:text-blue-500">
               Don't have an account? Sign up
             </Link>
           </div>
