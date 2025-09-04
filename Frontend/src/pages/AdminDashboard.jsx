@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   PlusIcon,
@@ -9,23 +9,46 @@ import {
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
-  const [stats] = useState({
-    totalCourses: 12,
-    totalStudents: 450,
-    totalRevenue: "₹245,000",
-    activeUsers: 280
+  const [stats, setStats] = useState({
+    totalCourses: 0,
+    totalStudents: 0,
+    totalRevenue: "₹0",
+    activeUsers: 0
   });
 
-  const [courses] = useState([
-    {
-      id: 1,
-      title: "Complete Web Development Bootcamp",
-      students: 150,
-      revenue: "₹75,000",
-      status: "active"
-    },
-    // Add more courses as needed
-  ]);
+  const [courses, setCourses] = useState([]);
+
+  // Fetch courses from backend
+  useEffect(() => {
+    const fetchCourses = async () => {
+      try {
+        const response = await fetch("http://localhost:3000/api/auth/v1/courses", {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          credentials: "include" // include cookies/session
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch courses");
+        }
+
+        const data = await response.json();
+        setCourses(data);
+
+        // Example: update stats dynamically if backend provides numbers
+        setStats((prev) => ({
+          ...prev,
+          totalCourses: data.length
+        }));
+      } catch (error) {
+        console.error("Error fetching courses:", error);
+      }
+    };
+
+    fetchCourses();
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -106,10 +129,10 @@ export default function AdminDashboard() {
                         Course Name
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Students
+                        Price
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Revenue
+                        Duration
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Status
@@ -121,15 +144,15 @@ export default function AdminDashboard() {
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {courses.map((course) => (
-                      <tr key={course.id}>
+                      <tr key={course._id}>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm font-medium text-gray-900">{course.title}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{course.students}</div>
+                          <div className="text-sm text-gray-900">₹{course.price}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{course.revenue}</div>
+                          <div className="text-sm text-gray-900">{course.duration} hrs</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`px-2 py-1 text-xs font-medium rounded-full ${
@@ -137,12 +160,12 @@ export default function AdminDashboard() {
                               ? 'bg-green-100 text-green-800' 
                               : 'bg-yellow-100 text-yellow-800'
                           }`}>
-                            {course.status}
+                            {course.status || "inactive"}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           <button 
-                            onClick={() => navigate(`/admin/course/${course.id}/edit`)}
+                            onClick={() => navigate(`/admin/course/${course._id}/edit`)}
                             className="text-blue-600 hover:text-blue-900 mr-4"
                           >
                             Edit
@@ -155,6 +178,9 @@ export default function AdminDashboard() {
                     ))}
                   </tbody>
                 </table>
+                {courses.length === 0 && (
+                  <p className="text-sm text-gray-500 mt-4">No courses available</p>
+                )}
               </div>
             </div>
           </div>
