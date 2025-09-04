@@ -1,139 +1,88 @@
 import connectSupabase from "../db/supabaseClient.js";
+import { createClient } from '@supabase/supabase-js';
 import multer from "multer";
 
 const supabase = connectSupabase();
-
 const storage = multer.memoryStorage();
 export const upload = multer({ storage });
 
+// Create admin client with service role key (bypasses RLS)
+const supabaseAdmin = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY // This bypasses RLS
+);
+
 const createCourse = async (req, res) => {
   try {
-    // --- AUTHORIZATION REMOVED FOR TESTING ---
-    /*
-    // Get the authenticated user first
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError || !user) {
-      return res.status(401).json({ message: "Unauthorized - Please login" });
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) return res.status(401).json({ message: "Unauthorized - No token" });
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !user) return res.status(401).json({ message: "Unauthorized - Invalid token" });
+
+    const { data: userRecord, error: userError } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", user.id)
+      .single();
+
+    if (userError || !userRecord || !userRecord.is_admin) {
+      return res.status(403).json({ message: "Forbidden - Admins only" });
     }
-    */
-    // Placeholder user ID for testing purposes.
-    const DUMMY_USER_ID = "00000000-0000-0000-0000-000000000000";
-    // --- END OF TESTING CHANGES ---
 
     const { title, description, price, category, prerequisites, objectives } = req.body;
     const thumbnailFile = req.file;
+    if (!thumbnailFile) return res.status(400).json({ message: "Thumbnail required" });
+    if (!title?.trim()) return res.status(400).json({ message: "Title required" });
 
-    // Detailed logging of received data
-    console.log('Received data:', {
-      title: title,
-      description: description,
-      price: price,
-      category: category,
-      prerequisites: prerequisites,
-      objectives: objectives,
-      created_by: DUMMY_USER_ID, // Using dummy ID
-      hasFile: !!thumbnailFile
-    });
-
-    // Individual field validation with specific messages
-    if (!thumbnailFile) {
-      return res.status(400).json({
-        message: "Thumbnail file is required"
-      });
-    }
-
-    if (!title || !title.trim()) {
-      return res.status(400).json({ message: "Title is required" });
-    }
-
-    if (!description || !description.trim()) {
-      return res.status(400).json({ message: "Description is required" });
-    }
-
-    if (!category || !category.trim()) {
-      return res.status(400).json({ message: "Category is required" });
-    }
-
-    if (!prerequisites || !prerequisites.trim()) {
-      return res.status(400).json({ message: "Prerequisites are required" });
-    }
-
-    if (!objectives) {
-      return res.status(400).json({ message: "Objectives are required" });
-    }
-
-    if (!price) {
-      return res.status(400).json({ message: "Price is required" });
-    }
-
-    // Validate price is a number
     const numericPrice = Number(price);
-    if (isNaN(numericPrice)) {
-      return res.status(400).json({
-        message: "Price must be a valid number"
-      });
-    }
+    if (isNaN(numericPrice)) return res.status(400).json({ message: "Price must be a number" });
 
-    // ✅ Upload file to Supabase
     const fileExt = thumbnailFile.originalname.split(".").pop();
     const fileName = `thumbnails/${Date.now()}.${fileExt}`;
 
-    const { error: uploadError } = await supabase.storage
+    // Use admin client for storage upload
+    const { error: uploadError } = await supabaseAdmin.storage
       .from("course-thumbnails")
-      .upload(fileName, thumbnailFile.buffer, {
-        contentType: thumbnailFile.mimetype,
-      });
+      .upload(fileName, thumbnailFile.buffer, { contentType: thumbnailFile.mimetype });
 
-    if (uploadError) {
-      return res.status(500).json({ error: uploadError.message });
-    }
+    if (uploadError) return res.status(500).json({ error: uploadError.message });
 
-    const { data: publicUrlData } = supabase.storage
+    const { data: publicUrlData } = supabaseAdmin.storage
       .from("course-thumbnails")
       .getPublicUrl(fileName);
 
-    // The public URL of the uploaded thumbnail
     const thumbnailUrl = publicUrlData.publicUrl;
 
-    // ✅ Parse objectives
     let objectivesArray = [];
     if (objectives && typeof objectives === "string") {
-      try {
-        objectivesArray = JSON.parse(objectives);
-      } catch {
-        return res.status(400).json({
-          message: "Objectives must be a valid JSON array string",
-        });
-      }
+      objectivesArray = JSON.parse(objectives);
     }
 
-    // ✅ Insert into DB with the new thumbnail URL
-    const { data, error } = await supabase.from("courses").insert([
+    // Use admin client for database insert (bypasses RLS)
+    const { data, error } = await supabaseAdmin.from("courses").insert([
       {
         title,
         description,
-        price: Number(price),
+        price: numericPrice,
         category,
         prerequisites,
         objectives: objectivesArray,
         thumbnail: thumbnailUrl,
-        created_by: DUMMY_USER_ID, // Using dummy ID
-        status: 'active'
+        created_by: user.id,
+        status: "active",
+        created_at: new Date().toISOString(), // Explicitly set timestamp
       },
     ]).select();
 
     if (error) {
+      console.error("Database insert error:", error);
       return res.status(400).json({ error: error.message });
     }
 
-    res.status(201).json({
-      message: "Course created successfully",
-      course: data[0],
-    });
-
-  } catch (error) {
-    console.log("Course creation error:", error);
+    res.status(201).json({ message: "Course created successfully", course: data[0] });
+  } catch (err) {
+    console.error("Course creation error:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 };
