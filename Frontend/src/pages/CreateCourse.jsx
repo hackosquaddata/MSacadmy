@@ -1,25 +1,46 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 
 export default function CreateCourse() {
   const navigate = useNavigate();
+  const { courseId } = useParams(); // For edit mode
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(""); // ✅ For backend error messages
+  const [error, setError] = useState("");
   const [courseData, setCourseData] = useState({
-    title: '',
-    description: '',
-    price: '',
-    category: '',
-    duration: '',
+    title: "",
+    description: "",
+    price: "",
+    category: "",
+    duration: "",
     thumbnail: null,
-    prerequisites: '',
-    objectives: ['']
+    thumbnailUrl: "",
+    prerequisites: "",
+    objectives: [""],
   });
+
+  // Fetch course data in edit mode
+  useEffect(() => {
+    if (!courseId) return;
+    const token = localStorage.getItem("token");
+    fetch(`http://localhost:3000/api/admin/courses/${courseId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        setCourseData({
+          ...data,
+          objectives: data.objectives || [""],
+          thumbnail: null,
+          thumbnailUrl: data.thumbnail || "",
+        });
+      })
+      .catch((err) => console.error("Error fetching course:", err));
+  }, [courseId]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setError(""); // Clear previous errors
+    setError("");
 
     try {
       const token = localStorage.getItem("token");
@@ -42,37 +63,31 @@ export default function CreateCourse() {
         formData.append("thumbnail", courseData.thumbnail);
       }
 
-      const response = await fetch("http://localhost:3000/api/admin/coursecreation", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`, // ✅ required for auth
-        },
+      const url = courseId
+        ? `http://localhost:3000/api/admin/courses/${courseId}`
+        : "http://localhost:3000/api/admin/coursecreation";
+
+      const method = courseId ? "PUT" : "POST";
+
+      const response = await fetch(url, {
+        method,
+        headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
 
       const data = await response.json();
-      console.log("Course create response:", data);
 
       if (response.ok) {
         navigate("/admin/dashboard");
       } else {
-        // Display backend error message
-        setError(data.error || data.message || "Failed to create course");
+        setError(data.error || data.message || "Failed to save course");
       }
-
     } catch (err) {
-      console.error("Error creating course:", err);
+      console.error(err);
       setError("Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
-  };
-
-  const addObjective = () => {
-    setCourseData({
-      ...courseData,
-      objectives: [...courseData.objectives, '']
-    });
   };
 
   const handleObjectiveChange = (index, value) => {
@@ -81,12 +96,29 @@ export default function CreateCourse() {
     setCourseData({ ...courseData, objectives: newObjectives });
   };
 
+  const addObjective = () => {
+    setCourseData({
+      ...courseData,
+      objectives: [...courseData.objectives, ""],
+    });
+  };
+
+  const handleThumbnailChange = (file) => {
+    setCourseData({
+      ...courseData,
+      thumbnail: file,
+      thumbnailUrl: URL.createObjectURL(file),
+    });
+  };
+
   return (
     <div className="min-h-screen bg-gray-100 py-6">
       <div className="max-w-3xl mx-auto sm:px-6 lg:px-8">
         <div className="bg-white overflow-hidden shadow-sm rounded-lg">
           <div className="p-6">
-            <h2 className="text-2xl font-bold mb-6">Create New Course</h2>
+            <h2 className="text-2xl font-bold mb-6">
+              {courseId ? "Edit Course" : "Create New Course"}
+            </h2>
 
             {error && (
               <div className="mb-4 p-3 bg-red-100 text-red-700 rounded">
@@ -95,63 +127,83 @@ export default function CreateCourse() {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Course Title */}
+              {/* Title */}
               <div>
-                <label className="block text-sm font-medium text-gray-700">Course Title</label>
+                <label className="block text-sm font-medium text-gray-700">
+                  Course Title
+                </label>
                 <input
                   type="text"
                   required
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
                   value={courseData.title}
-                  onChange={(e) => setCourseData({ ...courseData, title: e.target.value })}
+                  onChange={(e) =>
+                    setCourseData({ ...courseData, title: e.target.value })
+                  }
                 />
               </div>
 
               {/* Description */}
               <div>
-                <label className="block text-sm font-medium text-gray-700">Description</label>
+                <label className="block text-sm font-medium text-gray-700">
+                  Description
+                </label>
                 <textarea
                   required
                   rows={4}
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
                   value={courseData.description}
-                  onChange={(e) => setCourseData({ ...courseData, description: e.target.value })}
+                  onChange={(e) =>
+                    setCourseData({ ...courseData, description: e.target.value })
+                  }
                 />
               </div>
 
-              {/* Price and Duration */}
+              {/* Price & Duration */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Price (₹)</label>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Price (₹)
+                  </label>
                   <input
                     type="number"
                     required
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
                     value={courseData.price}
-                    onChange={(e) => setCourseData({ ...courseData, price: e.target.value })}
+                    onChange={(e) =>
+                      setCourseData({ ...courseData, price: e.target.value })
+                    }
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Duration (hours)</label>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Duration (hours)
+                  </label>
                   <input
                     type="number"
                     required
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
                     value={courseData.duration}
-                    onChange={(e) => setCourseData({ ...courseData, duration: e.target.value })}
+                    onChange={(e) =>
+                      setCourseData({ ...courseData, duration: e.target.value })
+                    }
                   />
                 </div>
               </div>
 
               {/* Category */}
               <div>
-                <label className="block text-sm font-medium text-gray-700">Category</label>
+                <label className="block text-sm font-medium text-gray-700">
+                  Category
+                </label>
                 <select
                   required
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
                   value={courseData.category}
-                  onChange={(e) => setCourseData({ ...courseData, category: e.target.value })}
+                  onChange={(e) =>
+                    setCourseData({ ...courseData, category: e.target.value })
+                  }
                 >
                   <option value="">Select Category</option>
                   <option value="web-development">Web Development</option>
@@ -163,34 +215,49 @@ export default function CreateCourse() {
 
               {/* Thumbnail */}
               <div>
-                <label className="block text-sm font-medium text-gray-700">Thumbnail</label>
+                <label className="block text-sm font-medium text-gray-700">
+                  Thumbnail
+                </label>
                 <input
                   type="file"
                   accept="image/*"
                   className="mt-1 block w-full"
-                  onChange={(e) => setCourseData({ ...courseData, thumbnail: e.target.files[0] })}
+                  onChange={(e) => handleThumbnailChange(e.target.files[0])}
                 />
+                {courseData.thumbnailUrl && (
+                  <img
+                    src={courseData.thumbnailUrl}
+                    alt="Thumbnail preview"
+                    className="mt-2 h-32 object-cover rounded"
+                  />
+                )}
               </div>
 
               {/* Prerequisites */}
               <div>
-                <label className="block text-sm font-medium text-gray-700">Prerequisites</label>
+                <label className="block text-sm font-medium text-gray-700">
+                  Prerequisites
+                </label>
                 <textarea
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
                   value={courseData.prerequisites}
-                  onChange={(e) => setCourseData({ ...courseData, prerequisites: e.target.value })}
+                  onChange={(e) =>
+                    setCourseData({ ...courseData, prerequisites: e.target.value })
+                  }
                 />
               </div>
 
-              {/* Learning Objectives */}
+              {/* Objectives */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Learning Objectives</label>
-                {courseData.objectives.map((objective, index) => (
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Learning Objectives
+                </label>
+                {courseData.objectives.map((obj, index) => (
                   <div key={index} className="flex mb-2">
                     <input
                       type="text"
                       className="flex-1 rounded-md border-gray-300 shadow-sm"
-                      value={objective}
+                      value={obj}
                       onChange={(e) => handleObjectiveChange(index, e.target.value)}
                       placeholder="Enter an objective"
                     />
@@ -205,11 +272,11 @@ export default function CreateCourse() {
                 </button>
               </div>
 
-              {/* Form Actions */}
+              {/* Actions */}
               <div className="flex justify-end space-x-4">
                 <button
                   type="button"
-                  onClick={() => navigate('/admin/dashboard')}
+                  onClick={() => navigate("/admin/dashboard")}
                   className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
                 >
                   Cancel
@@ -217,9 +284,11 @@ export default function CreateCourse() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className={`px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  className={`px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 ${
+                    loading ? "opacity-50 cursor-not-allowed" : ""
+                  }`}
                 >
-                  {loading ? 'Creating...' : 'Create Course'}
+                  {loading ? (courseId ? "Updating..." : "Creating...") : courseId ? "Update Course" : "Create Course"}
                 </button>
               </div>
             </form>

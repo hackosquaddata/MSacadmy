@@ -17,17 +17,20 @@ export default function AdminDashboard() {
   });
 
   const [courses, setCourses] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-  // Fetch courses from backend
+  const token = localStorage.getItem("token"); // ✅ read token from localStorage
+
+  // Fetch courses
   useEffect(() => {
     const fetchCourses = async () => {
       try {
-        const response = await fetch("http://localhost:3000/api/auth/v1/courses", {
+        const response = await fetch("http://localhost:3000/api/admin/courses", {
           method: "GET",
           headers: {
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`, // pass token
           },
-          credentials: "include" // include cookies/session
         });
 
         if (!response.ok) {
@@ -36,19 +39,39 @@ export default function AdminDashboard() {
 
         const data = await response.json();
         setCourses(data);
-
-        // Example: update stats dynamically if backend provides numbers
-        setStats((prev) => ({
-          ...prev,
-          totalCourses: data.length
-        }));
+        setStats(prev => ({ ...prev, totalCourses: data.length }));
       } catch (error) {
         console.error("Error fetching courses:", error);
       }
     };
 
-    fetchCourses();
-  }, []);
+    if (token) fetchCourses();
+  }, [token]);
+
+  // Delete course
+  const handleDeleteCourse = async (courseId) => {
+    if (!window.confirm("Are you sure you want to delete this course?")) return;
+
+    setLoading(true);
+    try {
+      const response = await fetch(`http://localhost:3000/api/admin/courses/${courseId}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`, // pass token
+        },
+      });
+
+      if (!response.ok) throw new Error("Failed to delete course");
+
+      setCourses(prev => prev.filter(course => course.id !== courseId));
+    } catch (error) {
+      console.error("Error deleting course:", error);
+      alert("Failed to delete course. Make sure you are logged in as admin.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -69,49 +92,37 @@ export default function AdminDashboard() {
           {/* Stats */}
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
             <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <AcademicCapIcon className="h-6 w-6 text-gray-400" />
-                  </div>
-                  <div className="ml-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">Total Courses</dt>
-                      <dd className="text-lg font-medium text-gray-900">{stats.totalCourses}</dd>
-                    </dl>
-                  </div>
+              <div className="p-5 flex items-center">
+                <AcademicCapIcon className="h-6 w-6 text-gray-400" />
+                <div className="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt className="text-sm font-medium text-gray-500 truncate">Total Courses</dt>
+                    <dd className="text-lg font-medium text-gray-900">{stats.totalCourses}</dd>
+                  </dl>
                 </div>
               </div>
             </div>
 
             <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <UsersIcon className="h-6 w-6 text-gray-400" />
-                  </div>
-                  <div className="ml-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">Total Students</dt>
-                      <dd className="text-lg font-medium text-gray-900">{stats.totalStudents}</dd>
-                    </dl>
-                  </div>
+              <div className="p-5 flex items-center">
+                <UsersIcon className="h-6 w-6 text-gray-400" />
+                <div className="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt className="text-sm font-medium text-gray-500 truncate">Total Students</dt>
+                    <dd className="text-lg font-medium text-gray-900">{stats.totalStudents}</dd>
+                  </dl>
                 </div>
               </div>
             </div>
 
             <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <ChartBarIcon className="h-6 w-6 text-gray-400" />
-                  </div>
-                  <div className="ml-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">Total Revenue</dt>
-                      <dd className="text-lg font-medium text-gray-900">{stats.totalRevenue}</dd>
-                    </dl>
-                  </div>
+              <div className="p-5 flex items-center">
+                <ChartBarIcon className="h-6 w-6 text-gray-400" />
+                <div className="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt className="text-sm font-medium text-gray-500 truncate">Total Revenue</dt>
+                    <dd className="text-lg font-medium text-gray-900">{stats.totalRevenue}</dd>
+                  </dl>
                 </div>
               </div>
             </div>
@@ -144,7 +155,7 @@ export default function AdminDashboard() {
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {courses.map((course) => (
-                      <tr key={course._id}>
+                      <tr key={course.id}>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm font-medium text-gray-900">{course.title}</div>
                         </td>
@@ -165,12 +176,16 @@ export default function AdminDashboard() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           <button 
-                            onClick={() => navigate(`/admin/course/${course._id}/edit`)}
+                            onClick={() => navigate(`/admin/course/${course.id}/edit`)}
                             className="text-blue-600 hover:text-blue-900 mr-4"
                           >
                             Edit
                           </button>
-                          <button className="text-red-600 hover:text-red-900">
+                          <button
+                            onClick={() => handleDeleteCourse(course.id)}
+                            className="text-red-600 hover:text-red-900"
+                            disabled={loading}
+                          >
                             Delete
                           </button>
                         </td>
