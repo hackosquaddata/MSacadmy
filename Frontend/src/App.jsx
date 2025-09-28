@@ -63,7 +63,7 @@ function App() {
         />
         
         <Route
-          path="/admin/course/:courseId/upload"
+          path="/admin/courses/:courseId/upload" // Change from :id to :courseId
           element={
             <ProtectedRoute adminOnly={true}>
               <CourseContentUpload />

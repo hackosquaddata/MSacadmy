@@ -202,7 +202,7 @@ export default function AdminDashboard() {
 
                             {/* Upload Content Button */}
                             <button
-                              onClick={() => navigate(`/admin/course/${course.id}/upload`)}
+                              onClick={() => navigate(`/admin/courses/${course.id}/upload`)}
                               className="inline-flex items-center px-3 py-1.5 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-md text-sm font-medium transition-colors"
                               title="Upload Course Content"
                             >
