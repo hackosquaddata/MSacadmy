@@ -687,7 +687,7 @@ const uploadCourseContent = async (req, res) => {
       })
     });
   }
-};
+};  
 
 export { 
   createCourse, 
