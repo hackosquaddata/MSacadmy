@@ -4,7 +4,9 @@ import {
   PlusIcon,
   UsersIcon,
   AcademicCapIcon,
-  ChartBarIcon
+  ChartBarIcon,
+  FolderOpenIcon,
+  CloudArrowUpIcon
 } from '@heroicons/react/24/outline';
 
 export default function AdminDashboard() {
@@ -157,13 +159,25 @@ export default function AdminDashboard() {
                     {courses.map((course) => (
                       <tr key={course.id}>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">{course.title}</div>
+                          <div className="flex items-center">
+                            {course.thumbnail && (
+                              <img 
+                                src={course.thumbnail} 
+                                alt={course.title}
+                                className="h-10 w-10 rounded-lg object-cover mr-3"
+                              />
+                            )}
+                            <div>
+                              <div className="text-sm font-medium text-gray-900">{course.title}</div>
+                              <div className="text-sm text-gray-500">{course.category}</div>
+                            </div>
+                          </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm text-gray-900">₹{course.price}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{course.duration} hrs</div>
+                          <div className="text-sm text-gray-900">{course.duration || 'N/A'} hrs</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`px-2 py-1 text-xs font-medium rounded-full ${
@@ -174,28 +188,108 @@ export default function AdminDashboard() {
                             {course.status || "inactive"}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          <button 
-                            onClick={() => navigate(`/admin/course/${course.id}/edit`)}
-                            className="text-blue-600 hover:text-blue-900 mr-4"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleDeleteCourse(course.id)}
-                            className="text-red-600 hover:text-red-900"
-                            disabled={loading}
-                          >
-                            Delete
-                          </button>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center space-x-3">
+                            {/* Manage Content Button */}
+                            <button
+                              onClick={() => navigate(`/admin/course/${course.id}/content`)}
+                              className="inline-flex items-center px-3 py-1.5 bg-green-100 text-green-700 hover:bg-green-200 rounded-md text-sm font-medium transition-colors"
+                              title="Manage Course Content"
+                            >
+                              <FolderOpenIcon className="h-4 w-4 mr-1.5" />
+                              Content
+                            </button>
+
+                            {/* Upload Content Button */}
+                            <button
+                              onClick={() => navigate(`/admin/course/${course.id}/upload`)}
+                              className="inline-flex items-center px-3 py-1.5 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-md text-sm font-medium transition-colors"
+                              title="Upload Course Content"
+                            >
+                              <CloudArrowUpIcon className="h-4 w-4 mr-1.5" />
+                              Upload
+                            </button>
+
+                            {/* Edit Button */}
+                            <button 
+                              onClick={() => navigate(`/admin/course/${course.id}/edit`)}
+                              className="text-indigo-600 hover:text-indigo-900 font-medium"
+                            >
+                              Edit
+                            </button>
+
+                            {/* Delete Button */}
+                            <button
+                              onClick={() => handleDeleteCourse(course.id)}
+                              className="text-red-600 hover:text-red-900 font-medium"
+                              disabled={loading}
+                            >
+                              {loading ? 'Deleting...' : 'Delete'}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
                 {courses.length === 0 && (
-                  <p className="text-sm text-gray-500 mt-4">No courses available</p>
+                  <div className="text-center py-12">
+                    <AcademicCapIcon className="mx-auto h-12 w-12 text-gray-400" />
+                    <h3 className="mt-2 text-sm font-medium text-gray-900">No courses</h3>
+                    <p className="mt-1 text-sm text-gray-500">Get started by creating a new course.</p>
+                    <div className="mt-6">
+                      <button
+                        onClick={() => navigate('/admin/create-course')}
+                        className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+                      >
+                        <PlusIcon className="h-5 w-5 mr-2" />
+                        Create Course
+                      </button>
+                    </div>
+                  </div>
                 )}
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Actions Panel */}
+          <div className="mt-8 bg-white shadow rounded-lg">
+            <div className="px-4 py-5 sm:p-6">
+              <h2 className="text-lg font-medium text-gray-900 mb-4">Quick Actions</h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <button
+                  onClick={() => navigate('/admin/create-course')}
+                  className="flex items-center justify-center px-4 py-3 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-colors"
+                >
+                  <PlusIcon className="h-6 w-6 mr-2" />
+                  Create New Course
+                </button>
+                
+                <button
+                  onClick={() => {
+                    // Navigate to first available course's content page, or show a selection modal
+                    if (courses.length > 0) {
+                      navigate(`/admin/course/${courses[0].id}/content`);
+                    } else {
+                      alert('Please create a course first');
+                    }
+                  }}
+                  className="flex items-center justify-center px-4 py-3 bg-green-50 hover:bg-green-100 text-green-700 rounded-lg transition-colors"
+                >
+                  <CloudArrowUpIcon className="h-6 w-6 mr-2" />
+                  Upload Content
+                </button>
+                
+                <button
+                  onClick={() => {
+                    // Add analytics/reports navigation here
+                    alert('Analytics feature coming soon!');
+                  }}
+                  className="flex items-center justify-center px-4 py-3 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg transition-colors"
+                >
+                  <ChartBarIcon className="h-6 w-6 mr-2" />
+                  View Analytics
+                </button>
               </div>
             </div>
           </div>

@@ -6,6 +6,7 @@ import CourseDashboard from './pages/CourseDashboard';
 import CourseDetails from './pages/CourseDetails';
 import AdminDashboard from './pages/AdminDashboard';
 import CreateCourse from './pages/CreateCourse';
+import CourseContentUpload from './pages/Admincourseuplaod';
 import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
@@ -39,7 +40,7 @@ function App() {
         <Route
           path="/admin/dashboard"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute adminOnly={true}>
               <AdminDashboard />
             </ProtectedRoute>
           }
@@ -47,7 +48,7 @@ function App() {
         <Route
           path="/admin/create-course"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute adminOnly={true}>
               <CreateCourse editMode={false} />
             </ProtectedRoute>
           }
@@ -55,8 +56,17 @@ function App() {
         <Route
           path="/admin/course/:courseId/edit"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute adminOnly={true}>
               <CreateCourse editMode={true} />
+            </ProtectedRoute>
+          }
+        />
+        
+        <Route
+          path="/admin/course/:courseId/upload"
+          element={
+            <ProtectedRoute adminOnly={true}>
+              <CourseContentUpload />
             </ProtectedRoute>
           }
         />
