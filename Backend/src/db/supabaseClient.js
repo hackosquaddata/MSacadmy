@@ -1,7 +1,8 @@
 // db/supabaseClient.js
 import { createClient } from '@supabase/supabase-js';
 
-export default function connectSupabase() {
+// Regular client with anon key for normal operations
+export function connectSupabase() {
   try {
     const SUPABASE_URL = process.env.SUPABASE_URL;
     const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
@@ -16,5 +17,30 @@ export default function connectSupabase() {
   } catch (error) {
     console.error("❌ Error connecting to Supabase:", error.message);
     process.exit(1); // stop server if DB connection fails
+  }
+}
+
+// Admin client with service_role key for privileged operations
+export function connectSupabaseAdmin() {
+  try {
+    const SUPABASE_URL = process.env.SUPABASE_URL;
+    const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error("Supabase admin credentials are missing. Check your .env file.");
+    }
+
+    const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    });
+    
+    console.log("✅ Connected to Supabase Admin successfully!");
+    return supabaseAdmin;
+  } catch (error) {
+    console.error("❌ Error connecting to Supabase Admin:", error.message);
+    process.exit(1);
   }
 }

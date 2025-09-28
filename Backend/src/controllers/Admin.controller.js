@@ -1,237 +1,701 @@
-import connectSupabase from "../db/supabaseClient.js";
-import { createClient } from "@supabase/supabase-js";
+import { connectSupabase, connectSupabaseAdmin } from "../db/supabaseClient.js";
 import multer from "multer";
 
 const supabase = connectSupabase();
+const supabaseAdmin = connectSupabaseAdmin();
+
 const storage = multer.memoryStorage();
 export const upload = multer({ storage });
 
-// Create admin client with service role key (bypasses RLS)
-const supabaseAdmin = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
-
-// 🔹 Create Course
 const createCourse = async (req, res) => {
   try {
     const token = req.headers.authorization?.split(" ")[1];
-    if (!token) return res.status(401).json({ message: "Unauthorized - No token" });
+    if (!token) {
+      return res.status(401).json({ message: "Unauthorized - No token provided" });
+    }
 
+    // Get the authenticated user
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    if (authError || !user) return res.status(401).json({ message: "Unauthorized - Invalid token" });
+    if (authError || !user) {
+      return res.status(401).json({ message: "Unauthorized - Invalid token" });
+    }
 
-    const { data: userRecord, error: userError } = await supabase
+    // Check if user is admin
+    const { data: userRecord } = await supabase
       .from("users")
       .select("*")
       .eq("id", user.id)
       .single();
 
-    if (userError || !userRecord || !userRecord.is_admin) {
-      return res.status(403).json({ message: "Forbidden - Admins only" });
+    if (!userRecord?.is_admin) {
+      return res.status(403).json({ message: "Forbidden - Admin access required" });
     }
 
     const { title, description, price, category, prerequisites, objectives } = req.body;
     const thumbnailFile = req.file;
-    if (!thumbnailFile) return res.status(400).json({ message: "Thumbnail required" });
-    if (!title?.trim()) return res.status(400).json({ message: "Title required" });
 
+    // Detailed logging of received data
+    console.log('Received data:', {
+      title: title,
+      description: description,
+      price: price,
+      category: category,
+      prerequisites: prerequisites,
+      objectives: objectives,
+      created_by: DUMMY_USER_ID, // Using dummy ID
+      hasFile: !!thumbnailFile
+    });
+
+    // Individual field validation with specific messages
+    if (!thumbnailFile) {
+      return res.status(400).json({
+        message: "Thumbnail file is required"
+      });
+    }
+
+    if (!title || !title.trim()) {
+      return res.status(400).json({ message: "Title is required" });
+    }
+
+    if (!description || !description.trim()) {
+      return res.status(400).json({ message: "Description is required" });
+    }
+
+    if (!category || !category.trim()) {
+      return res.status(400).json({ message: "Category is required" });
+    }
+
+    if (!prerequisites || !prerequisites.trim()) {
+      return res.status(400).json({ message: "Prerequisites are required" });
+    }
+
+    if (!objectives) {
+      return res.status(400).json({ message: "Objectives are required" });
+    }
+
+    if (!price) {
+      return res.status(400).json({ message: "Price is required" });
+    }
+
+    // Validate price is a number
     const numericPrice = Number(price);
-    if (isNaN(numericPrice)) return res.status(400).json({ message: "Price must be a number" });
+    if (isNaN(numericPrice)) {
+      return res.status(400).json({
+        message: "Price must be a valid number"
+      });
+    }
 
+    // ✅ Upload file to Supabase
     const fileExt = thumbnailFile.originalname.split(".").pop();
     const fileName = `thumbnails/${Date.now()}.${fileExt}`;
 
-    // Upload thumbnail
-    const { error: uploadError } = await supabaseAdmin.storage
+    const { error: uploadError } = await supabase.storage
       .from("course-thumbnails")
-      .upload(fileName, thumbnailFile.buffer, { contentType: thumbnailFile.mimetype });
+      .upload(fileName, thumbnailFile.buffer, {
+        contentType: thumbnailFile.mimetype,
+      });
 
-    if (uploadError) return res.status(500).json({ error: uploadError.message });
+    if (uploadError) {
+      return res.status(500).json({ error: uploadError.message });
+    }
 
-    const { data: publicUrlData } = supabaseAdmin.storage
+    const { data: publicUrlData } = supabase.storage
       .from("course-thumbnails")
       .getPublicUrl(fileName);
 
+    // The public URL of the uploaded thumbnail
     const thumbnailUrl = publicUrlData.publicUrl;
 
+    // ✅ Parse objectives
     let objectivesArray = [];
     if (objectives && typeof objectives === "string") {
-      objectivesArray = JSON.parse(objectives);
+      try {
+        objectivesArray = JSON.parse(objectives);
+      } catch {
+        return res.status(400).json({
+          message: "Objectives must be a valid JSON array string",
+        });
+      }
     }
 
-    // Insert into DB
-    const { data, error } = await supabaseAdmin
-      .from("courses")
-      .insert([{
+    // ✅ Insert into DB with the new thumbnail URL
+    const { data, error } = await supabase.from("courses").insert([
+      {
         title,
         description,
-        price: numericPrice,
+        price: Number(price),
         category,
         prerequisites,
         objectives: objectivesArray,
         thumbnail: thumbnailUrl,
-        created_by: user.id,
-        status: "active",
-        created_at: new Date().toISOString(),
-      }])
-      .select();
+        created_by: user.id, // Set the actual user ID
+        status: 'active'
+      },
+    ]).select();
 
     if (error) {
-      console.error("Database insert error:", error);
       return res.status(400).json({ error: error.message });
     }
 
-    res.status(201).json({ message: "Course created successfully", course: data[0] });
-  } catch (err) {
-    console.error("Course creation error:", err);
+    res.status(201).json({
+      message: "Course created successfully",
+      course: data[0],
+    });
+
+  } catch (error) {
+    console.log("Course creation error:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 };
 
-// 🔹 Edit Course
-const editCourse = async (req, res) => {
+// Delete a course
+const deleteCourse = async (req, res) => {
   try {
     const token = req.headers.authorization?.split(" ")[1];
-    if (!token) return res.status(401).json({ message: "Unauthorized - No token" });
+    if (!token) {
+      return res.status(401).json({ message: "Unauthorized - No token provided" });
+    }
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    if (authError || !user) return res.status(401).json({ message: "Unauthorized - Invalid token" });
+    if (authError || !user) {
+      return res.status(401).json({ message: "Unauthorized - Invalid token" });
+    }
 
-    const { data: userRecord, error: userError } = await supabase
+    const { data: userRecord } = await supabase
       .from("users")
       .select("*")
       .eq("id", user.id)
       .single();
 
-    if (userError || !userRecord || !userRecord.is_admin) {
-      return res.status(403).json({ message: "Forbidden - Admins only" });
+    if (!userRecord?.is_admin) {
+      return res.status(403).json({ message: "Forbidden - Admin access required" });
     }
 
-    const { id } = req.params; // <-- matches /courses/:id
-    const { title, description, price, category, prerequisites, objectives, status } = req.body;
+    const { id } = req.params;
 
-    let updatedFields = { title, description, category, prerequisites, status };
+    // Delete course contents first
+    const { error: contentDeleteError } = await supabaseAdmin
+      .from("course_contents")
+      .delete()
+      .eq("course_id", id);
 
-    if (price) {
-      const numericPrice = Number(price);
-      if (isNaN(numericPrice)) return res.status(400).json({ message: "Price must be a number" });
-      updatedFields.price = numericPrice;
+    if (contentDeleteError) {
+      return res.status(500).json({ error: "Failed to delete course contents" });
     }
 
-    if (objectives) {
-      updatedFields.objectives = Array.isArray(objectives)
-        ? objectives
-        : JSON.parse(objectives);
+    // Then delete the course
+    const { error: courseDeleteError } = await supabaseAdmin
+      .from("courses")
+      .delete()
+      .eq("id", id);
+
+    if (courseDeleteError) {
+      return res.status(400).json({ error: courseDeleteError.message });
     }
 
-    if (req.file) {
-      const fileExt = req.file.originalname.split(".").pop();
+    res.status(200).json({ message: "Course and its contents deleted successfully" });
+  } catch (err) {
+    console.error("Course deletion error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Get all courses
+const getCourses = async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("courses")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) return res.status(400).json({ error: error.message });
+    res.status(200).json(data);
+  } catch (err) {
+    console.error("Get courses error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Get a single course by ID
+const getCourseById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { data, error } = await supabase
+      .from("courses")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (error) return res.status(400).json({ error: error.message });
+    if (!data) return res.status(404).json({ error: "Course not found" });
+    
+    res.status(200).json(data);
+  } catch (err) {
+    console.error("Get course error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Edit a course
+const editCourse = async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) {
+      return res.status(401).json({ message: "Unauthorized - No token provided" });
+    }
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !user) {
+      return res.status(401).json({ message: "Unauthorized - Invalid token" });
+    }
+
+    const { data: userRecord } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", user.id)
+      .single();
+
+    if (!userRecord?.is_admin) {
+      return res.status(403).json({ message: "Forbidden - Admin access required" });
+    }
+
+    const { id } = req.params;
+    const { title, description, price, category, prerequisites, objectives } = req.body;
+    const thumbnailFile = req.file;
+
+    // Validate required fields
+    if (!title || !description || !price || !category || !prerequisites || !objectives) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
+
+    let updates = {
+      title,
+      description,
+      price: Number(price),
+      category,
+      prerequisites,
+      objectives: typeof objectives === 'string' ? JSON.parse(objectives) : objectives,
+      updated_at: new Date().toISOString()
+    };
+
+    // If new thumbnail is provided, upload it
+    if (thumbnailFile) {
+      const fileExt = thumbnailFile.originalname.split(".").pop();
       const fileName = `thumbnails/${Date.now()}.${fileExt}`;
 
       const { error: uploadError } = await supabaseAdmin.storage
         .from("course-thumbnails")
-        .upload(fileName, req.file.buffer, { contentType: req.file.mimetype });
+        .upload(fileName, thumbnailFile.buffer, {
+          contentType: thumbnailFile.mimetype,
+          upsert: false
+        });
 
-      if (uploadError) return res.status(500).json({ error: uploadError.message });
+      if (uploadError) {
+        return res.status(500).json({ error: uploadError.message });
+      }
 
       const { data: publicUrlData } = supabaseAdmin.storage
         .from("course-thumbnails")
         .getPublicUrl(fileName);
 
-      updatedFields.thumbnail = publicUrlData.publicUrl;
+      updates.thumbnail = publicUrlData.publicUrl;
     }
 
     const { data, error } = await supabaseAdmin
       .from("courses")
-      .update(updatedFields)
+      .update(updates)
       .eq("id", id)
-      .select();
+      .select()
+      .single();
 
-    if (error) {
-      console.error("Database update error:", error);
-      return res.status(400).json({ error: error.message });
-    }
+    if (error) return res.status(400).json({ error: error.message });
+    if (!data) return res.status(404).json({ error: "Course not found" });
 
-    res.status(200).json({ message: "Course updated successfully", course: data[0] });
+    res.status(200).json({
+      message: "Course updated successfully",
+      course: data
+    });
   } catch (err) {
     console.error("Course update error:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 };
 
-// 🔹 Delete Course
-const deleteCourse = async (req, res) => {
+// Update the getCourseContents function
+const getCourseContents = async (req, res) => {
+  try {
+    // Log the full request headers
+    console.log('Request headers:', req.headers);
+    console.log('CourseId from params:', req.params.courseId);
+    
+    const token = req.headers.authorization?.split(" ")[1];
+    console.log('Extracted token:', token?.substring(0, 20) + '...');
+    
+    if (!token) {
+      return res.status(401).json({ message: "Unauthorized - No token provided" });
+    }
+
+    // Log user authentication attempt
+    console.log('Attempting to authenticate user...');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    
+    if (authError) {
+      console.error('Authentication error:', authError);
+      return res.status(401).json({ 
+        message: "Unauthorized - Invalid token",
+        details: authError.message
+      });
+    }
+
+    if (!user) {
+      console.log('No user found with token');
+      return res.status(401).json({ message: "Unauthorized - User not found" });
+    }
+
+    console.log('Authenticated user ID:', user.id);
+
+    // Verify admin status
+    const { data: userRecord, error: userError } = await supabase
+      .from("users")
+      .select("is_admin")
+      .eq("id", user.id)
+      .single();
+
+    if (userError) {
+      console.error('User lookup error:', userError);
+      return res.status(500).json({ 
+        error: "Failed to verify admin status",
+        details: userError.message 
+      });
+    }
+
+    if (!userRecord?.is_admin) {
+      return res.status(403).json({ message: "Forbidden - Admin access required" });
+    }
+
+    const { courseId } = req.params;
+    console.log('Fetching contents for course:', courseId);
+
+    // Check if course exists first
+    const { data: courseExists, error: courseError } = await supabase
+      .from("courses")
+      .select("id")
+      .eq("id", courseId)
+      .single();
+
+    if (courseError || !courseExists) {
+      console.error('Course lookup error:', courseError);
+      return res.status(404).json({ error: "Course not found" });
+    }
+
+    // Fetch course contents
+    const { data, error } = await supabase
+      .from("course_contents")
+      .select(`
+        id,
+        course_id,
+        module_name,
+        lesson_title,
+        file_url,
+        file_type,
+        order_number,
+        created_at
+      `)
+      .eq("course_id", courseId)
+      .order("order_number", { ascending: true });
+
+    if (error) {
+      console.error('Content fetch error:', error);
+      return res.status(500).json({ 
+        error: "Failed to fetch course contents",
+        details: error.message 
+      });
+    }
+
+    console.log(`Successfully found ${data?.length || 0} content items`);
+    return res.status(200).json(data || []);
+
+  } catch (err) {
+    console.error("Detailed error:", {
+      message: err.message,
+      stack: err.stack,
+      details: err
+    });
+    return res.status(500).json({ 
+      error: "Internal server error",
+      message: err.message,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
+  }
+};
+
+// Delete course content (DB only, no storage)
+const deleteCourseContent = async (req, res) => {
   try {
     const token = req.headers.authorization?.split(" ")[1];
     if (!token) return res.status(401).json({ message: "Unauthorized - No token" });
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    if (authError || !user) return res.status(401).json({ message: "Unauthorized - Invalid token" });
+    if (authError || !user) return res.status(401).json({ message: "Unauthorized" });
 
+    const { data: userRecord } = await supabase.from("users").select("*").eq("id", user.id).single();
+    if (!userRecord?.is_admin) return res.status(403).json({ message: "Admins only" });
+
+    const { contentId } = req.params;
+    const { error } = await supabaseAdmin.from("course_contents").delete().eq("id", contentId);
+
+    if (error) return res.status(400).json({ error: error.message });
+
+    res.status(200).json({ message: "Content deleted" });
+  } catch (err) {
+    console.error("Delete content error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+const uploadCourseContent = async (req, res) => {
+  try {
+    console.log("=== Upload Course Content Debug ===");
+    console.log("Headers:", req.headers);
+    console.log("Body:", req.body);
+    console.log("File:", req.file);
+    console.log("Params:", req.params);
+
+    // 1. Token validation
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) {
+      console.log("❌ No token provided");
+      return res.status(401).json({ message: "Unauthorized - No token" });
+    }
+
+    console.log("✅ Token found:", token.substring(0, 20) + "...");
+
+    // 2. User authentication
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError) {
+      console.log("❌ Auth error:", authError);
+      return res.status(401).json({ 
+        message: "Unauthorized - Invalid token",
+        error: authError.message 
+      });
+    }
+
+    if (!user) {
+      console.log("❌ No user found");
+      return res.status(401).json({ message: "Unauthorized - User not found" });
+    }
+
+    console.log("✅ User authenticated:", user.id);
+
+    // 3. Admin check
     const { data: userRecord, error: userError } = await supabase
       .from("users")
-      .select("*")
+      .select("is_admin")
       .eq("id", user.id)
       .single();
 
-    if (userError || !userRecord || !userRecord.is_admin) {
-      return res.status(403).json({ message: "Forbidden - Admins only" });
+    if (userError) {
+      console.log("❌ User lookup error:", userError);
+      return res.status(500).json({ 
+        error: "Failed to verify admin status",
+        details: userError.message 
+      });
     }
 
-    const { id } = req.params; // <-- matches /courses/:id
+    if (!userRecord?.is_admin) {
+      console.log("❌ User is not admin:", userRecord);
+      return res.status(403).json({ message: "Admins only" });
+    }
 
-    const { error } = await supabaseAdmin
+    console.log("✅ Admin verified");
+
+    // 4. Parameter validation
+    const { courseId } = req.params;
+    const { module_name, lesson_title, order_number, embed_url } = req.body;
+
+    console.log("Parameters:", { courseId, module_name, lesson_title, order_number, embed_url });
+
+    if (!courseId) {
+      return res.status(400).json({ message: "Course ID is required" });
+    }
+
+    if (!lesson_title?.trim()) {
+      return res.status(400).json({ message: "Lesson title is required" });
+    }
+
+    // 5. Course existence check
+    const { data: courseExists, error: courseCheckError } = await supabase
       .from("courses")
-      .delete()
-      .eq("id", id);
-
-    if (error) {
-      console.error("Database delete error:", error);
-      return res.status(400).json({ error: error.message });
-    }
-
-    res.status(200).json({ message: "Course deleted successfully" });
-  } catch (err) {
-    console.error("Course delete error:", err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-// 🔹 Get all courses
-const getCourses = async (req, res) => {
-  try {
-    const { data, error } = await supabaseAdmin.from("courses").select("*");
-
-    if (error) {
-      console.error("Error fetching courses:", error);
-      return res.status(400).json({ error: error.message });
-    }
-
-    res.status(200).json(data);
-  } catch (err) {
-    console.error("Server error fetching courses:", err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-// 🔹 Get single course by ID
-const getCourseById = async (req, res) => {
-  try {
-    const { id } = req.params; // match /courses/:id
-    const { data, error } = await supabaseAdmin
-      .from("courses")
-      .select("*")
-      .eq("id", id)
+      .select("id, title")
+      .eq("id", courseId)
       .single();
 
-    if (error) return res.status(404).json({ error: error.message });
+    if (courseCheckError) {
+      console.log("❌ Course check error:", courseCheckError);
+      return res.status(500).json({ 
+        error: "Failed to verify course",
+        details: courseCheckError.message 
+      });
+    }
 
-    res.status(200).json(data);
+    if (!courseExists) {
+      console.log("❌ Course not found:", courseId);
+      return res.status(404).json({ error: "Course not found" });
+    }
+
+    console.log("✅ Course exists:", courseExists.title);
+
+    // 6. File/URL validation
+    if (req.file && embed_url?.trim()) {
+      return res.status(400).json({ 
+        message: "Cannot upload both file and embed URL. Please choose one." 
+      });
+    }
+
+    if (!req.file && !embed_url?.trim()) {
+      return res.status(400).json({ 
+        message: "Either file or YouTube embed URL is required" 
+      });
+    }
+
+    let finalUrl = "";
+    let fileType = "";
+
+    // 7. Handle file upload
+    if (req.file) {
+      console.log("📁 Processing file upload...");
+      
+      const allowedTypes = [
+        'video/mp4', 'video/mpeg', 'video/quicktime', 'video/webm',
+        'application/pdf',
+        'image/jpeg', 'image/png', 'image/gif', 'image/webp'
+      ];
+
+      if (!allowedTypes.includes(req.file.mimetype)) {
+        return res.status(400).json({ 
+          message: `File type ${req.file.mimetype} not allowed. Allowed: video, PDF, images` 
+        });
+      }
+
+      const fileExt = req.file.originalname.split(".").pop()?.toLowerCase();
+      const fileName = `course-contents/${courseId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+      console.log("Uploading file:", fileName);
+
+      const { error: uploadError } = await supabaseAdmin.storage
+        .from("course-contents")
+        .upload(fileName, req.file.buffer, { 
+          contentType: req.file.mimetype,
+          cacheControl: '3600',
+          upsert: false 
+        });
+
+      if (uploadError) {
+        console.log("❌ File upload error:", uploadError);
+        return res.status(500).json({ 
+          error: "File upload failed",
+          details: uploadError.message 
+        });
+      }
+
+      const { data: publicUrlData } = supabaseAdmin.storage
+        .from("course-contents")
+        .getPublicUrl(fileName);
+
+      finalUrl = publicUrlData.publicUrl;
+      
+      // Determine file type
+      if (req.file.mimetype.startsWith("video/")) {
+        fileType = "video";
+      } else if (req.file.mimetype === "application/pdf") {
+        fileType = "pdf";
+      } else if (req.file.mimetype.startsWith("image/")) {
+        fileType = "image";
+      } else {
+        fileType = "other";
+      }
+
+      console.log("✅ File uploaded:", finalUrl);
+    }
+    // 8. Handle embed URL
+    else if (embed_url?.trim()) {
+      console.log("🔗 Processing embed URL...");
+      
+      const url = embed_url.trim();
+      
+      // Basic URL validation
+      try {
+        new URL(url);
+      } catch {
+        return res.status(400).json({ message: "Invalid URL format" });
+      }
+
+      finalUrl = url;
+      fileType = "video"; // Assuming embed URLs are videos
+      
+      console.log("✅ Embed URL processed:", finalUrl);
+    }
+
+    // 9. Database insertion
+    const insertData = {
+      course_id: courseId,
+      module_name: module_name?.trim() || null,
+      lesson_title: lesson_title.trim(),
+      file_url: finalUrl,
+      file_type: fileType,
+      order_number: order_number ? parseInt(order_number, 10) : 0,
+      created_at: new Date().toISOString(),
+    };
+
+    console.log("💾 Inserting data:", insertData);
+
+    const { data, error: insertError } = await supabaseAdmin
+      .from("course_contents")
+      .insert([insertData])
+      .select()
+      .single();
+
+    if (insertError) {
+      console.log("❌ Database insert error:", insertError);
+      return res.status(500).json({ 
+        error: "Failed to save content",
+        details: insertError.message,
+        hint: insertError.hint 
+      });
+    }
+
+    console.log("✅ Content saved successfully:", data.id);
+
+    res.status(201).json({ 
+      message: "Content uploaded successfully", 
+      content: data 
+    });
+
   } catch (err) {
-    console.error("Error fetching course:", err);
-    res.status(500).json({ error: "Internal server error" });
+    console.error("💥 Unexpected error in uploadCourseContent:", {
+      message: err.message,
+      stack: err.stack,
+      name: err.name
+    });
+    
+    res.status(500).json({ 
+      error: "Internal server error",
+      message: err.message,
+      ...(process.env.NODE_ENV === 'development' && { 
+        stack: err.stack,
+        details: err 
+      })
+    });
   }
 };
 
-export { createCourse, editCourse, deleteCourse, getCourses, getCourseById };
+export { 
+  createCourse, 
+  deleteCourse, 
+  editCourse, 
+  getCourses, 
+  getCourseById,
+  uploadCourseContent, 
+  getCourseContents, 
+  deleteCourseContent,
+};
