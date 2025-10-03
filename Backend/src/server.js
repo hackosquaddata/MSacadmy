@@ -3,6 +3,7 @@ import dotenv from "dotenv"
 import {connectSupabase} from './db/supabaseClient.js'
 import cors from "cors"
 import cookieParser from "cookie-parser";
+import paymentRoutes from './routes/Payment.routes.js';
 
 dotenv.config({
     path:'./.env'
@@ -27,6 +28,13 @@ app.use(cookieParser())
 
 connectSupabase()
 
+// Debug middleware
+app.use((req, res, next) => {
+  console.log(`${req.method} ${req.url}`);
+  console.log('Headers:', req.headers);
+  next();
+});
+
 // routes declaration 
 
 app.get("/",(req,res)=>{
@@ -36,11 +44,25 @@ app.get("/",(req,res)=>{
 
 import userRouter from "./routes/User.routes.js"
 import Adminrouter from "./routes/Admin.routes.js"
+import commentsRoutes from './routes/Comments.routes.js';
 
 app.use("/api/auth/v1",userRouter)
 app.use("/api/admin/",Adminrouter)
+app.use("/api/payments", paymentRoutes)
+app.use("/api/courses", userRouter); // Add this line
+app.use('/api/auth/v1', commentsRoutes);
 
-app.listen((process.env.PORT||3000),()=>{
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Error:', err);
+  res.status(500).json({ 
+    message: 'Internal server error',
+    error: process.env.NODE_ENV === 'development' ? err.message : undefined
+  });
+});
 
-    console.log(`the server is conneted to the ${process.env.PORT || 3000}`)
-})
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});

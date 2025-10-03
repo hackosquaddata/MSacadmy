@@ -20,131 +20,84 @@ const createCourse = async (req, res) => {
       return res.status(401).json({ message: "Unauthorized - Invalid token" });
     }
 
-    // Check if user is admin
-    const { data: userRecord } = await supabase
+    // Verify if user is admin
+    const { data: userRecord, error: userError } = await supabase
       .from("users")
-      .select("*")
+      .select("is_admin")
       .eq("id", user.id)
       .single();
 
-    if (!userRecord?.is_admin) {
+    if (userError || !userRecord?.is_admin) {
       return res.status(403).json({ message: "Forbidden - Admin access required" });
     }
 
     const { title, description, price, category, prerequisites, objectives } = req.body;
     const thumbnailFile = req.file;
 
-    // Detailed logging of received data
-    console.log('Received data:', {
-      title: title,
-      description: description,
-      price: price,
-      category: category,
-      prerequisites: prerequisites,
-      objectives: objectives,
-      created_by: DUMMY_USER_ID, // Using dummy ID
-      hasFile: !!thumbnailFile
-    });
-
-    // Individual field validation with specific messages
-    if (!thumbnailFile) {
-      return res.status(400).json({
-        message: "Thumbnail file is required"
-      });
+    if (!title || !price) {
+      return res.status(400).json({ message: "Title and price are required" });
     }
 
-    if (!title || !title.trim()) {
-      return res.status(400).json({ message: "Title is required" });
-    }
+    let thumbnailUrl = null;
 
-    if (!description || !description.trim()) {
-      return res.status(400).json({ message: "Description is required" });
-    }
+    if (thumbnailFile) {
+      const fileExt = thumbnailFile.originalname.split(".").pop();
+      const fileName = `course-thumbnails/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
 
-    if (!category || !category.trim()) {
-      return res.status(400).json({ message: "Category is required" });
-    }
-
-    if (!prerequisites || !prerequisites.trim()) {
-      return res.status(400).json({ message: "Prerequisites are required" });
-    }
-
-    if (!objectives) {
-      return res.status(400).json({ message: "Objectives are required" });
-    }
-
-    if (!price) {
-      return res.status(400).json({ message: "Price is required" });
-    }
-
-    // Validate price is a number
-    const numericPrice = Number(price);
-    if (isNaN(numericPrice)) {
-      return res.status(400).json({
-        message: "Price must be a valid number"
-      });
-    }
-
-    // ✅ Upload file to Supabase
-    const fileExt = thumbnailFile.originalname.split(".").pop();
-    const fileName = `thumbnails/${Date.now()}.${fileExt}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from("course-thumbnails")
-      .upload(fileName, thumbnailFile.buffer, {
-        contentType: thumbnailFile.mimetype,
-      });
-
-    if (uploadError) {
-      return res.status(500).json({ error: uploadError.message });
-    }
-
-    const { data: publicUrlData } = supabase.storage
-      .from("course-thumbnails")
-      .getPublicUrl(fileName);
-
-    // The public URL of the uploaded thumbnail
-    const thumbnailUrl = publicUrlData.publicUrl;
-
-    // ✅ Parse objectives
-    let objectivesArray = [];
-    if (objectives && typeof objectives === "string") {
-      try {
-        objectivesArray = JSON.parse(objectives);
-      } catch {
-        return res.status(400).json({
-          message: "Objectives must be a valid JSON array string",
+      const { error: uploadError } = await supabaseAdmin.storage
+        .from("course-thumbnails")
+        .upload(fileName, thumbnailFile.buffer, {
+          contentType: thumbnailFile.mimetype,
+          upsert: false
         });
+
+      if (uploadError) {
+        console.error("Thumbnail upload error:", uploadError);
+        return res.status(500).json({ message: "Failed to upload thumbnail" });
       }
+
+      const { data: publicUrlData } = supabaseAdmin.storage
+        .from("course-thumbnails")
+        .getPublicUrl(fileName);
+
+      thumbnailUrl = publicUrlData.publicUrl;
     }
 
-    // ✅ Insert into DB with the new thumbnail URL
-    const { data, error } = await supabase.from("courses").insert([
-      {
-        title,
-        description,
-        price: Number(price),
-        category,
-        prerequisites,
-        objectives: objectivesArray,
-        thumbnail: thumbnailUrl,
-        created_by: user.id, // Set the actual user ID
-        status: 'active'
-      },
-    ]).select();
+    // Create course with actual user ID
+    const { data: course, error: courseError } = await supabaseAdmin
+      .from("courses")
+      .insert([
+        {
+          title,
+          description: description || null,
+          price: parseFloat(price),
+          category: category || null,
+          prerequisites: prerequisites || null,
+          objectives: objectives ? JSON.parse(objectives) : null,
+          thumbnail: thumbnailUrl,
+          created_by: user.id, // Use actual user ID instead of DUMMY_USER_ID
+          status: 'active'
+        }
+      ])
+      .select()
+      .single();
 
-    if (error) {
-      return res.status(400).json({ error: error.message });
+    if (courseError) {
+      console.error("Course creation error:", courseError);
+      return res.status(500).json({ message: "Failed to create course" });
     }
 
     res.status(201).json({
       message: "Course created successfully",
-      course: data[0],
+      course
     });
 
-  } catch (error) {
-    console.log("Course creation error:", error);
-    res.status(500).json({ error: "Internal server error" });
+  } catch (err) {
+    console.error("Course creation error:", err);
+    res.status(500).json({
+      message: "Internal server error",
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
   }
 };
 
