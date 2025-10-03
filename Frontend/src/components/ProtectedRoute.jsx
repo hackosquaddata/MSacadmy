@@ -1,56 +1,64 @@
-import { Navigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { Navigate, useLocation } from 'react-router-dom';
+import { useEffect } from 'react';
 
-export default function ProtectedRoute({ children }) {
-  const [loading, setLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+const ProtectedRoute = ({ children, adminOnly = false }) => {
+  const token = localStorage.getItem('token');
+  const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+  const location = useLocation();
+  
+  // Handle both data structures (nested user object and direct user data)
+  const user = storedUser.user || storedUser;
+  console.log('Protected Route - User Data:', user);
+  console.log('Protected Route - Admin Status:', user.is_admin);
 
   useEffect(() => {
-    const verifyAuth = async () => {
-      const token = localStorage.getItem('token');
-      
-      if (!token) {
-        setLoading(false);
-        return;
-      }
-
-      try {
-        // Verify token with backend
-        const response = await fetch('http://localhost:3000/api/auth/v1/me', {
-          headers: {
-             "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`, // important
-          }
-        });
-
-        if (response.ok) {
-          setIsAuthenticated(true);
-        } else {
-          // If token is invalid, remove it
-          localStorage.removeItem('token');
+    // Validate token on mount
+    if (token) {
+      fetch('http://localhost:3000/api/auth/v1/me', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
         }
-      } catch (error) {
-        console.error('Auth verification failed:', error);
-        localStorage.removeItem('token');
-      } finally {
-        setLoading(false);
-      }
-    };
+      })
+      .then(async res => {
+        if (!res.ok) {
+          // Token is invalid, clear storage
+          localStorage.clear();
+          window.location.href = '/login';
+        } else {
+          // Update stored user data
+          const data = await res.json();
+          console.log('Fetched fresh user data:', data);
+          // Store the user object directly
+          localStorage.setItem('user', JSON.stringify(data.user || data));
+        }
+      })
+      .catch(() => {
+        // Error validating token, clear storage
+        localStorage.clear();
+        window.location.href = '/login';
+      });
+    }
+  }, [token]);
 
-    verifyAuth();
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-      </div>
-    );
+  if (!token) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+  // Check for admin routes
+  if (adminOnly && user?.is_admin !== true) {
+    console.log('Non-admin trying to access admin route');
+    console.log('Current user data:', user);
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  // Redirect admins trying to access regular user routes
+  if (!adminOnly && user?.is_admin === true && location.pathname.startsWith('/dashboard')) {
+    console.log('Admin trying to access user route');
+    return <Navigate to="/admin/dashboard" replace />;
   }
 
   return children;
-}
+};
+
+export default ProtectedRoute;

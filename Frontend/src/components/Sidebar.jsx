@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import {
   AcademicCapIcon,
   BookOpenIcon,
@@ -7,19 +8,30 @@ import {
   UserCircleIcon,
   ChartBarIcon,
   Bars3Icon,
-  XMarkIcon
+  XMarkIcon,
+  ArrowLeftOnRectangleIcon
 } from '@heroicons/react/24/outline';
 
 export default function Sidebar() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(true);
+
+  const handleSignOut = () => {
+    // Clear all auth-related data
+    localStorage.clear(); // This will remove token and any other stored data
+    
+    // Show success message
+    toast.success('Signed out successfully');
+    
+    // Force redirect to login page
+    window.location.href = '/login'; // Using window.location for a full page refresh
+  };
 
   const navigation = [
     { name: 'Available Courses', href: '/dashboard', icon: BookOpenIcon },
-    { name: 'My Learning', href: '/dashboard/enrolled', icon: AcademicCapIcon },
-    { name: 'Progress', href: '/dashboard/progress', icon: ChartBarIcon },
-    { name: 'Assignments', href: '/dashboard/assignments', icon: ClipboardDocumentListIcon },
-    { name: 'Profile', href: '/dashboard/profile', icon: UserCircleIcon },
+    { name: 'My Learning', href: '/my-learning', icon: AcademicCapIcon },
+    { name: 'Profile', href: '/profile', icon: UserCircleIcon },
   ];
 
   return (
@@ -51,6 +63,17 @@ export default function Sidebar() {
           </Link>
         ))}
       </nav>
+      
+      {/* Sign Out Button */}
+      <div className="mt-auto p-4">
+        <button
+          onClick={handleSignOut}
+          className="flex items-center w-full px-4 py-2 text-white hover:bg-gray-800 rounded-lg transition-colors"
+        >
+          <ArrowLeftOnRectangleIcon className="h-6 w-6 mr-3" />
+          {isOpen && <span>Sign Out</span>}
+        </button>
+      </div>
     </div>
   );
 }
