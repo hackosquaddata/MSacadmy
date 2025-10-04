@@ -1,5 +1,6 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
 
 export default function Signup() {
   const [formData, setFormData] = useState({
@@ -7,14 +8,12 @@ export default function Signup() {
     password: "",
     full_name: "",
   });
-  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    console.log("Signup Data:", formData); // Debug log
 
     try {
       const response = await fetch("http://localhost:3000/api/auth/v1/signup", {
@@ -22,118 +21,125 @@ export default function Signup() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          email: formData.email, // Use formData.email instead of email
-          password: formData.password, // Use formData.password instead of password
-          full_name: formData.full_name, // Use formData.full_name instead of full_name
-        }),
+        body: JSON.stringify(formData),
       });
 
       const data = await response.json();
-      console.log("Signup response:", data); // Debug log
 
       if (response.ok) {
-        // Signup successful
+        toast.success("Signup successful!");
         navigate("/login");
       } else {
-        setError(data.error || "Signup failed. Please try again.");
+        toast.error(data.error || "Signup failed");
       }
     } catch (err) {
       console.error("Signup error:", err);
-      setError("Something went wrong. Please try again.");
+      toast.error("Something went wrong");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-lg shadow">
-        <div>
-          <h2 className="text-3xl font-bold text-center text-gray-900">
-            Sign Up for MS Academy
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-50 to-secondary-50 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8">
+        <div className="text-center mb-6">
+          <h2 className="text-3xl font-bold text-gray-900 mb-2">
+            Create Account
           </h2>
-          {error && (
-            <div className="mt-4 p-3 bg-red-100 text-red-700 rounded-lg">
-              {error}
-            </div>
-          )}
+          <p className="text-gray-600">Join MS Academy today</p>
         </div>
-        <form onSubmit={handleSubmit} className="mt-8 space-y-6">
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Full Name */}
           <div>
-            <label
-              htmlFor="full_name"
-              className="block text-sm font-medium text-gray-700"
-            >
+            <label className="block text-sm font-medium text-gray-700 mb-1">
               Full Name
             </label>
             <input
-              id="full_name"
               type="text"
               required
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
               value={formData.full_name}
               onChange={(e) =>
                 setFormData({ ...formData, full_name: e.target.value })
               }
-              disabled={loading}
             />
           </div>
+
+          {/* Email */}
           <div>
-            <label
-              htmlFor="email"
-              className="block text-sm font-medium text-gray-700"
-            >
+            <label className="block text-sm font-medium text-gray-700 mb-1">
               Email
             </label>
             <input
-              id="email"
               type="email"
               required
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
               value={formData.email}
               onChange={(e) =>
                 setFormData({ ...formData, email: e.target.value })
               }
-              disabled={loading}
             />
           </div>
+
+          {/* Password */}
           <div>
-            <label
-              htmlFor="password"
-              className="block text-sm font-medium text-gray-700"
-            >
+            <label className="block text-sm font-medium text-gray-700 mb-1">
               Password
             </label>
             <input
-              id="password"
               type="password"
               required
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
               value={formData.password}
               onChange={(e) =>
                 setFormData({ ...formData, password: e.target.value })
               }
-              disabled={loading}
             />
           </div>
-          <div>
+
+          {/* Submit Button */}
+          <div className="mt-6">
             <button
               type="submit"
               disabled={loading}
-              className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
-                loading ? "opacity-50 cursor-not-allowed" : ""
-              }`}
+              className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
             >
-              {loading ? "Signing up..." : "Sign up"}
+              {loading ? (
+                <svg
+                  className="animate-spin h-5 w-5 text-white"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  ></circle>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
+                </svg>
+              ) : (
+                "Create Account"
+              )}
             </button>
           </div>
-          <div className="text-center">
+
+          {/* Login Link */}
+          <div className="text-center mt-4">
             <Link
               to="/login"
-              className="text-blue-600 hover:text-blue-500"
+              className="text-sm font-medium text-indigo-600 hover:text-indigo-500"
             >
-              Already have an account? Log in
+              Already have an account? Sign in
             </Link>
           </div>
         </form>

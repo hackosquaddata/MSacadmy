@@ -44,39 +44,31 @@ export default function Login() {
       const userResponse = await fetch("http://localhost:3000/api/auth/v1/me", {
         headers: {
           "Authorization": `Bearer ${data.token}`,
-          "Accept": "application/json"
+          "Content-Type": "application/json"
         }
       });
 
-      const userData = await userResponse.json();
-      console.log("User data received:", userData);
-      
       if (!userResponse.ok) {
         throw new Error("Failed to fetch user details");
       }
 
-      const userDetails = userData.user;
-      console.log("User details:", userDetails);
-      console.log("Admin status:", userDetails.is_admin);
-      console.log("Type of is_admin:", typeof userDetails.is_admin);
+      const userData = await userResponse.json();
+      
+      // Store user data in localStorage
+      localStorage.setItem("user", JSON.stringify(userData.user));
 
-      // Store the complete user data
-      localStorage.setItem("user", JSON.stringify(userDetails));
-
-      // Check admin status and redirect
-      if (userDetails.is_admin === true || userDetails.is_admin === 1) {
-        console.log("Admin user detected - Redirecting to admin dashboard");
+      // Check admin status with proper type checking
+      if (userData.user && userData.user.is_admin === true) {
         toast.success("Welcome Admin!");
         navigate("/admin/dashboard");
       } else {
-        console.log("Regular user detected - Redirecting to user dashboard");
-        toast.success("Login successful!");
+        toast.success("Welcome back!");
         navigate("/dashboard");
       }
+
     } catch (error) {
       console.error("Login error:", error);
-      setError(error.message || "Failed to login");
-      toast.error(error.message || "Failed to login");
+      toast.error(error.message || "Failed to log in");
     } finally {
       setLoading(false);
     }

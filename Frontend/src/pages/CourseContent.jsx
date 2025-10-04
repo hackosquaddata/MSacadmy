@@ -62,8 +62,22 @@ const CourseContent = () => {
       }
 
       const data = await response.json();
-      setProgress(data.contentProgress);
-      setOverallProgress(data.progress);
+      setProgress(data.contentProgress || {});
+      setOverallProgress(data.progress || 0);
+
+      // Update progress indicators in content list
+      if (courseData?.content) {
+        const updatedContent = courseData.content.map(content => ({
+          ...content,
+          completed: data.contentProgress[content.id]?.completed || false,
+          watch_time: data.contentProgress[content.id]?.watch_time || 0,
+          last_position: data.contentProgress[content.id]?.last_position || 0
+        }));
+        setCourseData(prev => ({
+          ...prev,
+          content: updatedContent
+        }));
+      }
     } catch (err) {
       console.error('Error fetching progress:', err);
       toast.error('Failed to load progress');
@@ -248,11 +262,11 @@ const CourseContent = () => {
           <div className="mt-4">
             <div className="flex justify-between text-sm mb-1">
               <span className="font-medium">Course Progress</span>
-              <span className="text-blue-600">{overallProgress}%</span>
+              <span className="text-blue-600">{Math.round(overallProgress)}%</span>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-2">
               <div 
-                className="bg-blue-600 h-2 rounded-full transition-all duration-500" 
+                className="bg-blue-600 h-2 rounded-full transition-all duration-500"
                 style={{ width: `${overallProgress}%` }}
               />
             </div>
