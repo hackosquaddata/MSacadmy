@@ -452,6 +452,54 @@ const deleteCourseContent = async (req, res) => {
   }
 };
 
+// Get dashboard statistics
+const getDashboardStats = async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) return res.status(401).json({ message: "Unauthorized" });
+
+    // Verify admin user
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !user) return res.status(401).json({ message: "Invalid token" });
+
+    // Get total number of unique students from enrollments
+    const { data: students, error: studentsError } = await supabaseAdmin
+      .from('enrollments')
+      .select('user_id')
+      .eq('status', 'active');
+
+    if (studentsError) {
+      console.error('Error fetching students:', studentsError);
+      return res.status(500).json({ message: "Failed to fetch students" });
+    }
+
+    // Get unique student count
+    const uniqueStudents = [...new Set(students.map(s => s.user_id))].length;
+
+    // Calculate total revenue from enrollments
+    const { data: revenue, error: revenueError } = await supabaseAdmin
+      .from('enrollments')
+      .select('amount_paid')
+      .eq('status', 'active');
+
+    if (revenueError) {
+      console.error('Error fetching revenue:', revenueError);
+      return res.status(500).json({ message: "Failed to fetch revenue" });
+    }
+
+    const totalRevenue = revenue.reduce((sum, item) => sum + (item.amount_paid || 0), 0);
+
+    res.json({
+      totalStudents: uniqueStudents,
+      totalRevenue: totalRevenue
+    });
+
+  } catch (error) {
+    console.error('Error in getDashboardStats:', error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 export { 
   createCourse, 
   deleteCourse, 
@@ -461,4 +509,5 @@ export {
   uploadCourseContent, 
   getCourseContents, 
   deleteCourseContent,
+  getDashboardStats
 };

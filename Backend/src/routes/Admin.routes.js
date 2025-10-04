@@ -1,5 +1,5 @@
 import { Router } from "express";
-import {createCourse, upload, deleteCourse, editCourse, getCourses, getCourseById, uploadCourseContent,getCourseContents,deleteCourseContent}  from "../controllers/Admin.controller.js"
+import {createCourse, upload, deleteCourse, editCourse, getCourses, getCourseById, uploadCourseContent,getCourseContents,deleteCourseContent, getDashboardStats}  from "../controllers/Admin.controller.js"
 
 const router = Router();
 
@@ -13,6 +13,7 @@ router.get("/courses/:courseId/contents", getCourseContents);
 
 // Delete individual content
 router.delete("/courses/contents/:contentId", deleteCourseContent);
+router.get("/dashboard/stats", getDashboardStats);
 
 export default router
 

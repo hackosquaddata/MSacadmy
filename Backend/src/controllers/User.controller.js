@@ -389,4 +389,61 @@ const getEnrolledCourses = async (req, res) => {
   }
 };
 
-export { signupUser, loginUser, getCurrentUser, getCourse,checkCourseAccess,getEnrolledCourses };
+const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    // Get site URL from environment variable
+    const siteUrl = process.env.SITE_URL || 'http://localhost:5173';
+
+    const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${siteUrl}/reset-password`,
+    });
+
+    if (error) {
+      console.error('Password reset error details:', {
+        message: error.message,
+        status: error.status,
+        code: error?.code
+      });
+      
+      if (error.message.includes('SMTP')) {
+        return res.status(500).json({ 
+          message: "Email service not configured. Please contact support.",
+          details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+      }
+
+      return res.status(500).json({ 
+        message: "Failed to send recovery email. Please try again later.",
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
+    }
+
+    // Send a generic success message for security
+    res.json({ 
+      message: "If an account exists with this email, you will receive password reset instructions."
+    });
+
+  } catch (err) {
+    console.error('Server error during password reset:', err);
+    res.status(500).json({ 
+      message: "An unexpected error occurred. Please try again later.",
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+};
+
+export { 
+  signupUser, 
+  loginUser, 
+  getCurrentUser, 
+  getCourse,
+  checkCourseAccess,
+  getEnrolledCourses,
+  forgotPassword 
+};
