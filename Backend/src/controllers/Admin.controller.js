@@ -227,8 +227,7 @@ const editCourse = async (req, res) => {
       price: Number(price),
       category,
       prerequisites,
-      objectives: typeof objectives === 'string' ? JSON.parse(objectives) : objectives,
-      updated_at: new Date().toISOString()
+      objectives: typeof objectives === 'string' ? JSON.parse(objectives) : objectives
     };
 
     // If new thumbnail is provided, upload it
