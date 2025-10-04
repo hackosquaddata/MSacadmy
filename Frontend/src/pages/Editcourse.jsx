@@ -2,14 +2,14 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 
 export default function EditCourse() {
-  const { id } = useParams();
+  const { courseId } = useParams(); // Changed from 'id' to 'courseId'
   const navigate = useNavigate();
   const [course, setCourse] = useState(null);
 
   useEffect(() => {
     const fetchCourse = async () => {
       try {
-        const res = await fetch(`http://localhost:3000/api/admin/courses/${id}`, {
+        const res = await fetch(`http://localhost:3000/api/admin/courses/${courseId}`, {
           headers: {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${localStorage.getItem("token")}`
@@ -23,14 +23,14 @@ export default function EditCourse() {
       }
     };
     fetchCourse();
-  }, [id]);
+  }, [courseId]); // Changed dependency from 'id' to 'courseId'
 
   const handleUpdate = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
 
     try {
-      const res = await fetch(`http://localhost:3000/api/admin/courses/${id}`, {
+      const res = await fetch(`http://localhost:3000/api/admin/courses/${courseId}`, { // Changed from 'id' to 'courseId'
         method: "PUT",
         headers: {
           "Authorization": `Bearer ${localStorage.getItem("token")}`

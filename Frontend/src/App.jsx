@@ -13,6 +13,7 @@ import CourseContent from './pages/CourseContent';
 import PaymentSuccess from './pages/PaymentSuccess';
 import MyLearning from './pages/MyLearning';
 import UserProfile from './pages/UserProfile';
+import EditCourse from './pages/Editcourse'
 
 function App() {
   return (
@@ -102,7 +103,7 @@ function App() {
           }
         />
         <Route
-          path="/admin/courses/create"
+          path="/admin/create-course" // Changed from /admin/courses/create
           element={
             <ProtectedRoute adminOnly={true}>
               <CreateCourse />
@@ -114,6 +115,15 @@ function App() {
           element={
             <ProtectedRoute adminOnly={true}>
               <CourseContentUpload />
+            </ProtectedRoute>
+          }
+        />
+
+         <Route
+          path="/admin/course/:courseId/edit"
+          element={
+            <ProtectedRoute adminOnly={true}>
+              <EditCourse />
             </ProtectedRoute>
           }
         />

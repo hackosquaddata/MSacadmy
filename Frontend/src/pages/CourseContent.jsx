@@ -7,7 +7,8 @@ import {
   BookOpenIcon,
   ChevronDownIcon,
   ChevronUpIcon,
-  ArrowDownTrayIcon
+  ArrowDownTrayIcon,
+  CheckCircleIcon
 } from '@heroicons/react/24/outline';
 
 const CourseContent = () => {
@@ -21,10 +22,14 @@ const CourseContent = () => {
   const [comments, setComments] = useState([]);
   const [commentText, setCommentText] = useState('');
   const [loadingComments, setLoadingComments] = useState(false);
+  const [progress, setProgress] = useState({});
+  const [overallProgress, setOverallProgress] = useState(0);
+  const [loadingProgress, setLoadingProgress] = useState(false);
 
   // Load course content
   useEffect(() => {
     checkAccessAndLoadContent();
+    fetchProgress();
   }, [courseId]);
 
   // Load comments when active content changes
@@ -34,13 +39,13 @@ const CourseContent = () => {
     }
   }, [activeContent]);
 
-  // Fetch comments
-  const fetchComments = async (lessonId) => {
+  // Fetch course progress
+  const fetchProgress = async () => {
     try {
-      setLoadingComments(true);
+      setLoadingProgress(true);
       const token = localStorage.getItem('token');
       const response = await fetch(
-        `http://localhost:3000/api/auth/v1/lessons/${lessonId}/comments`,
+        `http://localhost:3000/api/auth/v1/courses/${courseId}/progress`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -48,46 +53,61 @@ const CourseContent = () => {
           }
         }
       );
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch progress');
+      }
+
       const data = await response.json();
-      if (!response.ok) throw new Error(data.message || 'Failed to fetch comments');
-      setComments(data);
+      setProgress(data.contentProgress);
+      setOverallProgress(data.progress);
     } catch (err) {
-      console.error('Error fetching comments:', err);
-      toast.error('Failed to load comments');
+      console.error('Error fetching progress:', err);
+      toast.error('Failed to load progress');
     } finally {
-      setLoadingComments(false);
+      setLoadingProgress(false);
     }
   };
 
-  // Submit comment
-  const handleCommentSubmit = async (e) => {
-    e.preventDefault();
-    if (!commentText.trim()) return;
-
+  // Update content progress
+  const updateProgress = async (contentId, completed) => {
     try {
       const token = localStorage.getItem('token');
       const response = await fetch(
-        `http://localhost:3000/api/auth/v1/lessons/${activeContent.id}/comments`,
+        `http://localhost:3000/api/auth/v1/content/${contentId}/progress`,
         {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ content: commentText.trim() })
+          body: JSON.stringify({ completed })
         }
       );
 
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message || 'Failed to post comment');
+      if (!response.ok) {
+        throw new Error('Failed to update progress');
+      }
 
-      setComments(prev => [data, ...prev]);
-      setCommentText('');
-      toast.success('Comment posted successfully');
+      const data = await response.json();
+      setProgress(prev => ({
+        ...prev,
+        [contentId]: data
+      }));
+      
+      // Refresh overall progress
+      fetchProgress();
+      toast.success('Progress updated');
     } catch (err) {
-      console.error('Error posting comment:', err);
-      toast.error('Failed to post comment');
+      console.error('Error updating progress:', err);
+      toast.error('Failed to update progress');
     }
+  };
+
+  // Handle content completion
+  const handleContentComplete = async () => {
+    if (!activeContent?.id) return;
+    await updateProgress(activeContent.id, true);
   };
 
   // Check course access and load content
@@ -142,6 +162,67 @@ const CourseContent = () => {
     }));
   };
 
+  // Fetch comments
+  const fetchComments = async (contentId) => {
+    try {
+      setLoadingComments(true);
+      const token = localStorage.getItem('token');
+      const response = await fetch(
+        `http://localhost:3000/api/auth/v1/content/${contentId}/comments`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/json'
+          }
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch comments');
+      }
+
+      const data = await response.json();
+      setComments(data);
+    } catch (err) {
+      console.error('Error fetching comments:', err);
+      toast.error('Failed to load comments');
+    } finally {
+      setLoadingComments(false);
+    }
+  };
+
+  // Submit comment
+  const handleCommentSubmit = async (e) => {
+    e.preventDefault();
+    if (!commentText.trim()) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(
+        `http://localhost:3000/api/auth/v1/content/${activeContent.id}/comments`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ content: commentText.trim() })
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to submit comment');
+      }
+
+      await fetchComments(activeContent.id);
+      setCommentText('');
+      toast.success('Comment posted successfully');
+    } catch (err) {
+      console.error('Error posting comment:', err);
+      toast.error('Failed to post comment');
+    }
+  };
+
   if (loading) return <div className="flex items-center justify-center h-screen bg-gray-100"><div>Loading course content...</div></div>;
   if (error) return <div className="flex items-center justify-center h-screen bg-gray-100"><div className="text-red-600">{error}</div></div>;
   if (!courseData || !courseData.content) return <div className="flex items-center justify-center h-screen bg-gray-100"><div>No content available for this course</div></div>;
@@ -181,7 +262,16 @@ const CourseContent = () => {
                       onClick={() => setActiveContent(lesson)}
                       className={`flex items-center w-full p-2 rounded-lg ${activeContent?.id === lesson.id ? 'bg-blue-50 text-blue-600' : 'hover:bg-gray-50'}`}
                     >
-                      {lesson.file_type === 'video' ? <PlayIcon className="w-5 h-5 mr-3 text-blue-500" /> : <DocumentIcon className="w-5 h-5 mr-3 text-red-500" />}
+                      <div className="relative flex-shrink-0">
+                        {lesson.file_type === 'video' ? (
+                          <PlayIcon className="w-5 h-5 mr-3 text-blue-500" />
+                        ) : (
+                          <DocumentIcon className="w-5 h-5 mr-3 text-red-500" />
+                        )}
+                        {progress[lesson.id]?.completed && (
+                          <div className="absolute -right-1 -top-1 w-3 h-3 bg-green-500 rounded-full" />
+                        )}
+                      </div>
                       <div className="text-left">
                         <p className="font-medium">{lesson.lesson_title}</p>
                         <p className="text-sm text-gray-500">{lesson.file_type.charAt(0).toUpperCase() + lesson.file_type.slice(1)}</p>
@@ -197,11 +287,38 @@ const CourseContent = () => {
 
       {/* Main Content */}
       <div className="flex-1 overflow-y-auto">
+        <div className="bg-white p-4 border-b">
+          <div className="max-w-4xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="text-lg font-semibold">Course Progress</div>
+              <div className="text-sm text-gray-600">{overallProgress}% Complete</div>
+            </div>
+          </div>
+          <div className="mt-2 w-full bg-gray-200 rounded-full h-2.5">
+            <div 
+              className="bg-blue-600 h-2.5 rounded-full transition-all duration-500" 
+              style={{ width: `${overallProgress}%` }}
+            />
+          </div>
+        </div>
         {activeContent ? (
           <div className="max-w-4xl mx-auto p-6">
             <div className="bg-white rounded-lg shadow-lg">
               <div className="p-6 border-b">
-                <h1 className="text-2xl font-semibold">{activeContent.lesson_title}</h1>
+                <div className="flex justify-between items-center">
+                  <h1 className="text-2xl font-semibold">{activeContent.lesson_title}</h1>
+                  <button
+                    onClick={handleContentComplete}
+                    className={`px-4 py-2 rounded-lg flex items-center ${
+                      progress[activeContent.id]?.completed
+                        ? 'bg-green-100 text-green-700'
+                        : 'bg-blue-600 text-white hover:bg-blue-700'
+                    }`}
+                    disabled={progress[activeContent.id]?.completed}
+                  >
+                    {progress[activeContent.id]?.completed ? 'Completed' : 'Mark as Complete'}
+                  </button>
+                </div>
                 {activeContent.lesson_description && <p className="text-gray-600 mt-2">{activeContent.lesson_description}</p>}
               </div>
 
@@ -215,55 +332,12 @@ const CourseContent = () => {
                         style={{ minHeight: '480px' }}
                         allowFullScreen
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      ></iframe>
-                    </div>
-
-                    {/* Comments */}
-                    <div className="mt-8 bg-white rounded-lg shadow-lg p-6">
-                      <h3 className="text-xl font-semibold mb-6">Comments</h3>
-
-                      <form onSubmit={handleCommentSubmit} className="mb-8">
-                        <textarea
-                          className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          rows="3"
-                          placeholder="Write your comment here..."
-                          value={commentText}
-                          onChange={e => setCommentText(e.target.value)}
-                        ></textarea>
-                        <button
-                          type="submit"
-                          className="mt-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                          disabled={!commentText.trim()}
-                        >
-                          Post Comment
-                        </button>
-                      </form>
-
-                      <div className="space-y-6">
-                        {comments.length ? comments.map(comment => (
-                          <div key={comment.id} className="flex space-x-4">
-                            <div className="flex-shrink-0">
-                              <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
-                                <span className="text-gray-600 font-semibold">
-                                  {comment.user?.full_name?.charAt(0).toUpperCase() || comment.user?.email?.charAt(0).toUpperCase() || "U"}
-                                </span>
-                              </div>
-                            </div>
-                            <div className="flex-grow">
-                              <div className="flex items-center space-x-2">
-                                <span className="font-semibold">{comment.user?.full_name || comment.user?.email || "Unknown User"}</span>
-                                <span className="text-gray-500 text-sm">{new Date(comment.created_at).toLocaleDateString()}</span>
-                              </div>
-                              <p className="mt-1 text-gray-700">{comment.content}</p>
-                            </div>
-                          </div>
-                        )) : <p className="text-gray-500 text-center">No comments yet. Be the first to comment!</p>}
-                      </div>
+                      />
                     </div>
                   </>
                 ) : activeContent.file_type === 'pdf' ? (
                   <div className="h-[800px]">
-                    <iframe src={activeContent.file_url} className="w-full h-full rounded-lg" title={activeContent.lesson_title}></iframe>
+                    <iframe src={activeContent.file_url} className="w-full h-full rounded-lg" title={activeContent.lesson_title} />
                   </div>
                 ) : (
                   <div className="p-4 border rounded-lg">
@@ -273,6 +347,54 @@ const CourseContent = () => {
                     </a>
                   </div>
                 )}
+              </div>
+
+              {/* Comments Section */}
+              <div className="mt-8 p-6 border-t">
+                <h3 className="text-xl font-semibold mb-6">Comments</h3>
+                <form onSubmit={handleCommentSubmit} className="mb-8">
+                  <textarea
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    rows="3"
+                    placeholder="Write your comment here..."
+                    value={commentText}
+                    onChange={e => setCommentText(e.target.value)}
+                  />
+                  <button
+                    type="submit"
+                    className="mt-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    disabled={!commentText.trim()}
+                  >
+                    Post Comment
+                  </button>
+                </form>
+
+                <div className="space-y-6">
+                  {loadingComments ? (
+                    <div className="text-center text-gray-500">Loading comments...</div>
+                  ) : comments.length > 0 ? (
+                    comments.map(comment => (
+                      <div key={comment.id} className="flex space-x-4">
+                        <div className="flex-shrink-0">
+                          <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
+                            <span className="text-gray-600 font-semibold">
+                              {comment.user?.full_name?.charAt(0).toUpperCase() || comment.user?.email?.charAt(0).toUpperCase() || "U"}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex-grow">
+                          <div className="flex items-center space-x-2">
+                            <span className="font-semibold">{comment.user?.full_name || comment.user?.email || "Unknown User"}</span>
+                            <span className="text-gray-500 text-sm">{new Date(comment.created_at).toLocaleDateString()}</span>
+                          </div>
+                          <p className="mt-1 text-gray-700">{comment.content}</p>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-gray-500 text-center">No comments yet. Be the first to comment!</p>
+                  )}
+                </div>
               </div>
             </div>
           </div>
