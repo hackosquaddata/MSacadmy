@@ -15,7 +15,7 @@ const getContentComments = async (req, res) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     if (authError || !user) return res.status(401).json({ message: "Invalid token" });
 
-    // Fetch comments
+    // Use content_id and correct join
     const { data: comments, error: commentsError } = await supabaseAdmin
       .from('lesson_comments')
       .select(`
@@ -23,11 +23,8 @@ const getContentComments = async (req, res) => {
         content,
         created_at,
         updated_at,
-        user:user_id (
-          id,
-          email,
-          full_name
-        )
+        user_id,
+        users!lesson_comments_user_id_fkey (id, email, full_name)
       `)
       .eq('content_id', contentId)
       .order('created_at', { ascending: false });
@@ -37,7 +34,19 @@ const getContentComments = async (req, res) => {
       return res.status(500).json({ message: "Failed to fetch comments" });
     }
 
-    res.json(comments);
+    const formattedComments = comments.map(comment => ({
+      id: comment.id,
+      content: comment.content,
+      created_at: comment.created_at,
+      updated_at: comment.updated_at,
+      user: {
+        id: comment.user_id,
+        email: comment.users?.email,
+        full_name: comment.users?.full_name || ''
+      }
+    }));
+
+    res.json(formattedComments);
   } catch (error) {
     console.error('Error in getContentComments:', error);
     res.status(500).json({ message: "Internal server error" });
@@ -58,33 +67,42 @@ const createComment = async (req, res) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     if (authError || !user) return res.status(401).json({ message: "Invalid token" });
 
-    // Insert comment
-    const { data: comment, error: commentError } = await supabaseAdmin
+    // Insert with content_id
+    const { data: newComment, error: insertError } = await supabaseAdmin
       .from('lesson_comments')
-      .insert([{
+      .insert({
         content_id: contentId,
         user_id: user.id,
         content: content.trim()
-      }])
+      })
       .select(`
         id,
         content,
         created_at,
         updated_at,
-        user:user_id (
-          id,
-          email,
-          full_name
-        )
+        user_id,
+        profiles:user_id (id, email, full_name)
       `)
       .single();
 
-    if (commentError) {
-      console.error('Error creating comment:', commentError);
+    if (insertError) {
+      console.error('Error creating comment:', insertError);
       return res.status(500).json({ message: "Failed to create comment" });
     }
 
-    res.status(201).json(comment);
+    const formattedComment = {
+      id: newComment.id,
+      content: newComment.content,
+      created_at: newComment.created_at,
+      updated_at: newComment.updated_at,
+      user: {
+        id: newComment.user_id,
+        email: newComment.users?.email,
+        full_name: newComment.users?.full_name || ''
+      }
+    };
+
+    res.status(201).json(formattedComment);
   } catch (error) {
     console.error('Error in createComment:', error);
     res.status(500).json({ message: "Internal server error" });

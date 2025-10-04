@@ -45,12 +45,14 @@ app.get("/",(req,res)=>{
 import userRouter from "./routes/User.routes.js"
 import Adminrouter from "./routes/Admin.routes.js"
 import commentsRoutes from './routes/Comments.routes.js';
+import progressRoutes from './routes/Progress.routes.js';
 
-app.use("/api/auth/v1",userRouter)
-app.use("/api/admin/",Adminrouter)
+app.use("/api/auth/v1", userRouter)
+app.use("/api/admin/", Adminrouter)
 app.use("/api/payments", paymentRoutes)
-app.use("/api/courses", userRouter); // Add this line
-app.use('/api/auth/v1', commentsRoutes);
+app.use("/api/courses", userRouter)
+app.use('/api/auth/v1', commentsRoutes)
+app.use('/api/auth/v1', progressRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
