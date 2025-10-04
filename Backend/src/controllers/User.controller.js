@@ -5,36 +5,51 @@ const supabaseAdmin = connectSupabaseAdmin();
 
 const signupUser = async (req, res) => {
   try {
-    const { email, password, full_name, is_admin = false } = req.body;
+    const { email, password, full_name } = req.body;
 
     if (!email || !password || !full_name) {
       return res.status(400).json({ error: "Missing email, password, or full_name" });
     }
 
+    // Create auth user
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: { full_name, is_admin },
-      },
+        data: { full_name }
+      }
     });
 
     if (error) return res.status(400).json({ error: error.message });
 
-    // Insert user into your "users" table with the same UID
-    const { error: dbError } = await supabase.from("users").insert([
-      {
-        id: data.user.id,
-        email,
-        full_name,
-        is_admin,
-      },
-    ]);
+    // Insert into users table
+    const { error: dbError } = await supabaseAdmin
+      .from('users')
+      .insert([
+        {
+          id: data.user.id,
+          email: email,
+          full_name: full_name,
+          created_at: new Date().toISOString(),
+          is_admin: false,
+          bio: 'No bio added yet',
+          phone: null,
+          location: null
+        }
+      ]);
 
-    if (dbError) return res.status(500).json({ error: dbError.message });
+    if (dbError) {
+      console.error('Database error:', dbError);
+      return res.status(500).json({ error: dbError.message });
+    }
 
-    return res.status(200).json({ message: "User signed up", user: data.user });
+    return res.status(200).json({ 
+      message: "User signed up successfully",
+      user: data.user 
+    });
+
   } catch (err) {
+    console.error('Signup error:', err);
     res.status(500).json({ error: "Server error" });
   }
 };
@@ -81,23 +96,91 @@ const loginUser = async (req, res) => {
 const getCurrentUser = async (req, res) => {
   try {
     const token = req.headers.authorization?.split(" ")[1];
-    if (!token) return res.status(401).json({ error: "No token provided" });
+    if (!token) return res.status(401).json({ message: "Unauthorized" });
 
-    const { data: { user }, error } = await supabase.auth.getUser(token);
-    if (error || !user) return res.status(401).json({ error: "Unauthorized" });
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError) throw authError;
 
-    const { data: userData, error: dbError } = await supabase
-      .from("users")
-      .select("*")
-      .eq("id", user.id)
+    // Get user details from users table
+    const { data: userData, error: userError } = await supabaseAdmin
+      .from('users')
+      .select('*')
+      .eq('id', user.id)
       .single();
 
-    if (dbError) return res.status(500).json({ error: dbError.message });
+    if (userError) {
+      // If user doesn't exist in users table, create entry
+      const { data: newUser, error: createError } = await supabaseAdmin
+        .from('users')
+        .insert([{
+          id: user.id,
+          email: user.email,
+          full_name: user.user_metadata?.full_name || 'User',
+          is_admin: false,
+          created_at: new Date().toISOString()
+        }])
+        .select()
+        .single();
 
-    return res.status(200).json({ user: userData });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+      if (createError) throw createError;
+      userData = newUser;
+    }
+
+    // Get enrollments
+    const { data: enrollments, error: enrollmentsError } = await supabaseAdmin
+      .from('enrollments')
+      .select(`
+        id,
+        course:courses (
+          id,
+          title,
+          thumbnail
+        )
+      `)
+      .eq('user_id', user.id)
+      .eq('status', 'active');
+
+    if (enrollmentsError) throw enrollmentsError;
+
+    // Format enrolled courses with progress
+    const enrolledCourses = enrollments?.map(enrollment => ({
+      ...enrollment.course,
+      progress: 0 // You can calculate actual progress here
+    })) || [];
+
+    // Send structured response
+    res.json({
+      user: {
+        id: userData.id,
+        email: userData.email,
+        full_name: userData.full_name,
+        is_admin: Boolean(userData.is_admin), // Ensure boolean type
+        created_at: userData.created_at
+      },
+      enrolled_courses: enrolledCourses,
+      total_courses: enrolledCourses.length,
+      average_progress: 0
+    });
+
+  } catch (error) {
+    console.error('Error in getCurrentUser:', error);
+    res.status(500).json({ 
+      message: "Failed to fetch user details",
+      error: error.message 
+    });
   }
+};
+
+const calculateCourseProgress = (courseId, progressData) => {
+  const courseProgress = progressData?.filter(p => p.course_id === courseId) || [];
+  if (!courseProgress.length) return 0;
+  return Math.round((courseProgress.filter(p => p.completed).length / courseProgress.length) * 100);
+};
+
+const calculateAverageProgress = (courses) => {
+  if (!courses.length) return 0;
+  const totalProgress = courses.reduce((sum, course) => sum + (course.progress || 0), 0);
+  return Math.round(totalProgress / courses.length);
 };
 
 const getCourse = async (req,res)=>{

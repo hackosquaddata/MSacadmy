@@ -15,18 +15,19 @@ const getCourseProgress = async (req, res) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     if (authError || !user) return res.status(401).json({ message: "Invalid token" });
 
-    // Get all content IDs for the course first
+    // Get all content IDs for the course
     const { data: courseContents, error: contentsError } = await supabaseAdmin
       .from('course_contents')
-      .select('id')
-      .eq('course_id', courseId);
+      .select('*')
+      .eq('course_id', courseId)
+      .order('order_number');
 
     if (contentsError) {
       console.error('Error fetching course contents:', contentsError);
       return res.status(500).json({ message: "Failed to fetch course contents" });
     }
 
-    // Get progress for all contents
+    // Get progress for this user and course
     const { data: progress, error: progressError } = await supabaseAdmin
       .from('course_progress')
       .select('*')
@@ -38,20 +39,29 @@ const getCourseProgress = async (req, res) => {
       return res.status(500).json({ message: "Failed to fetch progress" });
     }
 
-    // Calculate overall progress
+    // Calculate progress
     const totalContents = courseContents.length;
     const completedContents = progress.filter(p => p.completed).length;
     const overallProgress = totalContents > 0 ? (completedContents / totalContents) * 100 : 0;
+
+    // Create a map of content progress
+    const contentProgress = progress.reduce((acc, p) => {
+      acc[p.content_id] = {
+        completed: p.completed,
+        watch_time: p.watch_time || 0,
+        last_position: p.last_position || 0
+      };
+      return acc;
+    }, {});
 
     res.json({
       total: totalContents,
       completed: completedContents,
       progress: Math.round(overallProgress),
-      contentProgress: progress.reduce((acc, p) => {
-        acc[p.content_id] = p;
-        return acc;
-      }, {})
+      contentProgress,
+      contents: courseContents
     });
+
   } catch (error) {
     console.error('Error in getCourseProgress:', error);
     res.status(500).json({ message: "Internal server error" });
