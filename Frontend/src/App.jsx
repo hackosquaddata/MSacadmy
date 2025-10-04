@@ -14,6 +14,7 @@ import PaymentSuccess from './pages/PaymentSuccess';
 import MyLearning from './pages/MyLearning';
 import UserProfile from './pages/UserProfile';
 import EditCourse from './pages/Editcourse'
+import AdminCourseContent from './pages/AdminCourseContent'; // Import the new component
 
 function App() {
   return (
@@ -124,6 +125,14 @@ function App() {
           element={
             <ProtectedRoute adminOnly={true}>
               <EditCourse />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/course/:courseId/content"
+          element={
+            <ProtectedRoute adminOnly={true}>
+              <AdminCourseContent />
             </ProtectedRoute>
           }
         />

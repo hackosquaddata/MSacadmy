@@ -8,7 +8,10 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
   ArrowDownTrayIcon,
-  CheckCircleIcon
+  CheckCircleIcon,
+  ClockIcon,
+  UserIcon,
+  ChatBubbleLeftIcon
 } from '@heroicons/react/24/outline';
 
 const CourseContent = () => {
@@ -234,47 +237,79 @@ const CourseContent = () => {
   }, {});
 
   return (
-    <div className="flex h-screen bg-gray-100">
+    <div className="flex h-screen bg-gray-50">
       {/* Sidebar */}
-      <div className="w-80 bg-white shadow-lg overflow-y-auto">
-        <div className="p-4 border-b">
-          <h2 className="text-xl font-semibold">{courseData.course.title}</h2>
-          <p className="text-sm text-gray-600 mt-1">Course Content</p>
+      <div className="w-96 bg-white shadow-lg overflow-y-auto">
+        <div className="p-6 border-b">
+          <h2 className="text-2xl font-bold text-gray-800">{courseData?.course?.title}</h2>
+          <p className="text-sm text-gray-600 mt-2">Course Content</p>
+          
+          {/* Progress Bar */}
+          <div className="mt-4">
+            <div className="flex justify-between text-sm mb-1">
+              <span className="font-medium">Course Progress</span>
+              <span className="text-blue-600">{overallProgress}%</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div 
+                className="bg-blue-600 h-2 rounded-full transition-all duration-500" 
+                style={{ width: `${overallProgress}%` }}
+              />
+            </div>
+          </div>
         </div>
-        <div className="p-4">
+
+        {/* Module List */}
+        <div className="p-4 space-y-2">
           {Object.entries(modules).map(([moduleName, lessons], moduleIndex) => (
-            <div key={moduleIndex} className="mb-4">
+            <div key={moduleIndex} className="bg-white rounded-lg shadow-sm">
               <button
                 onClick={() => toggleModule(moduleName)}
-                className="flex items-center justify-between w-full p-3 bg-gray-50 rounded-lg hover:bg-gray-100"
+                className="flex items-center justify-between w-full p-4 hover:bg-gray-50 rounded-lg transition-colors"
               >
-                <div className="flex items-center">
-                  <BookOpenIcon className="w-5 h-5 mr-2 text-gray-500" />
-                  <h3 className="font-medium text-gray-700">{moduleName}</h3>
+                <div className="flex items-center space-x-3">
+                  <BookOpenIcon className="w-5 h-5 text-blue-600" />
+                  <div className="text-left">
+                    <h3 className="font-medium text-gray-800">{moduleName}</h3>
+                    <p className="text-sm text-gray-500">{lessons.length} lessons</p>
+                  </div>
                 </div>
-                {expandedModules[moduleName] ? <ChevronUpIcon className="w-5 h-5 text-gray-500" /> : <ChevronDownIcon className="w-5 h-5 text-gray-500" />}
+                {expandedModules[moduleName] ? 
+                  <ChevronUpIcon className="w-5 h-5 text-gray-400" /> : 
+                  <ChevronDownIcon className="w-5 h-5 text-gray-400" />
+                }
               </button>
+
               {expandedModules[moduleName] && (
-                <div className="ml-4 mt-2 space-y-2">
+                <div className="ml-4 mr-2 mb-4 space-y-1">
                   {lessons.map(lesson => (
                     <button
                       key={lesson.id}
                       onClick={() => setActiveContent(lesson)}
-                      className={`flex items-center w-full p-2 rounded-lg ${activeContent?.id === lesson.id ? 'bg-blue-50 text-blue-600' : 'hover:bg-gray-50'}`}
+                      className={`flex items-center w-full p-3 rounded-lg transition-colors ${
+                        activeContent?.id === lesson.id 
+                          ? 'bg-blue-50 text-blue-700' 
+                          : 'hover:bg-gray-50'
+                      }`}
                     >
-                      <div className="relative flex-shrink-0">
-                        {lesson.file_type === 'video' ? (
-                          <PlayIcon className="w-5 h-5 mr-3 text-blue-500" />
-                        ) : (
-                          <DocumentIcon className="w-5 h-5 mr-3 text-red-500" />
-                        )}
+                      <div className="relative flex items-center w-full">
+                        <div className="flex-shrink-0 mr-3">
+                          {lesson.file_type === 'video' ? (
+                            <PlayIcon className="w-5 h-5 text-blue-600" />
+                          ) : (
+                            <DocumentIcon className="w-5 h-5 text-red-500" />
+                          )}
+                        </div>
+                        <div className="flex-grow text-left">
+                          <p className="font-medium text-gray-800 line-clamp-1">{lesson.lesson_title}</p>
+                          <div className="flex items-center text-sm text-gray-500 space-x-2">
+                            <span>{lesson.file_type}</span>
+                            {lesson.is_preview && <span className="text-green-600">• Preview</span>}
+                          </div>
+                        </div>
                         {progress[lesson.id]?.completed && (
-                          <div className="absolute -right-1 -top-1 w-3 h-3 bg-green-500 rounded-full" />
+                          <CheckCircleIcon className="w-5 h-5 text-green-500 ml-2" />
                         )}
-                      </div>
-                      <div className="text-left">
-                        <p className="font-medium">{lesson.lesson_title}</p>
-                        <p className="text-sm text-gray-500">{lesson.file_type.charAt(0).toUpperCase() + lesson.file_type.slice(1)}</p>
                       </div>
                     </button>
                   ))}
@@ -287,112 +322,120 @@ const CourseContent = () => {
 
       {/* Main Content */}
       <div className="flex-1 overflow-y-auto">
-        <div className="bg-white p-4 border-b">
-          <div className="max-w-4xl mx-auto flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="text-lg font-semibold">Course Progress</div>
-              <div className="text-sm text-gray-600">{overallProgress}% Complete</div>
-            </div>
-          </div>
-          <div className="mt-2 w-full bg-gray-200 rounded-full h-2.5">
-            <div 
-              className="bg-blue-600 h-2.5 rounded-full transition-all duration-500" 
-              style={{ width: `${overallProgress}%` }}
-            />
-          </div>
-        </div>
         {activeContent ? (
           <div className="max-w-4xl mx-auto p-6">
-            <div className="bg-white rounded-lg shadow-lg">
+            <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+              {/* Content Header */}
               <div className="p-6 border-b">
-                <div className="flex justify-between items-center">
-                  <h1 className="text-2xl font-semibold">{activeContent.lesson_title}</h1>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h1 className="text-2xl font-bold text-gray-800">{activeContent.lesson_title}</h1>
+                    {activeContent.lesson_description && (
+                      <p className="mt-2 text-gray-600">{activeContent.lesson_description}</p>
+                    )}
+                  </div>
                   <button
                     onClick={handleContentComplete}
-                    className={`px-4 py-2 rounded-lg flex items-center ${
+                    className={`px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors ${
                       progress[activeContent.id]?.completed
                         ? 'bg-green-100 text-green-700'
                         : 'bg-blue-600 text-white hover:bg-blue-700'
                     }`}
                     disabled={progress[activeContent.id]?.completed}
                   >
-                    {progress[activeContent.id]?.completed ? 'Completed' : 'Mark as Complete'}
+                    {progress[activeContent.id]?.completed ? (
+                      <>
+                        <CheckCircleIcon className="w-5 h-5" />
+                        <span>Completed</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircleIcon className="w-5 h-5" />
+                        <span>Mark Complete</span>
+                      </>
+                    )}
                   </button>
                 </div>
-                {activeContent.lesson_description && <p className="text-gray-600 mt-2">{activeContent.lesson_description}</p>}
               </div>
 
+              {/* Content Body */}
               <div className="p-6">
                 {activeContent.file_type === 'video' ? (
-                  <>
-                    <div className="relative w-full" style={{ paddingTop: '56.25%' }}>
-                      <iframe
-                        src={activeContent.file_url.includes('youtube.com') ? activeContent.file_url.replace('watch?v=', 'embed/') : activeContent.file_url}
-                        className="absolute top-0 left-0 w-full h-full rounded-lg shadow-lg"
-                        style={{ minHeight: '480px' }}
-                        allowFullScreen
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      />
-                    </div>
-                  </>
-                ) : activeContent.file_type === 'pdf' ? (
-                  <div className="h-[800px]">
-                    <iframe src={activeContent.file_url} className="w-full h-full rounded-lg" title={activeContent.lesson_title} />
+                  <div className="relative w-full rounded-lg overflow-hidden" style={{ paddingTop: '56.25%' }}>
+                    <iframe
+                      src={activeContent.embed_url}
+                      className="absolute top-0 left-0 w-full h-full"
+                      title={activeContent.lesson_title}
+                      frameBorder="0"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
                   </div>
                 ) : (
-                  <div className="p-4 border rounded-lg">
-                    <a href={activeContent.file_url} download className="flex items-center text-blue-600 hover:text-blue-800">
-                      <ArrowDownTrayIcon className="w-5 h-5 mr-2" />
-                      Download Resource
-                    </a>
+                  <div className="space-y-4">
+                    {/* PDF Viewer */}
+                    <div className="relative w-full rounded-lg overflow-hidden bg-gray-50" style={{ height: '600px' }}>
+                      <object
+                        data={activeContent.file_url}
+                        type="application/pdf"
+                        className="absolute top-0 left-0 w-full h-full"
+                      >
+                        <p>PDF cannot be displayed. <a href={activeContent.file_url} target="_blank" rel="noopener noreferrer">Download PDF</a></p>
+                      </object>
+                    </div>
                   </div>
                 )}
               </div>
 
               {/* Comments Section */}
-              <div className="mt-8 p-6 border-t">
-                <h3 className="text-xl font-semibold mb-6">Comments</h3>
-                <form onSubmit={handleCommentSubmit} className="mb-8">
+              <div className="border-t bg-gray-50 p-6">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Discussion</h3>
+                <form onSubmit={handleCommentSubmit} className="mb-6">
                   <textarea
-                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    rows="3"
-                    placeholder="Write your comment here..."
                     value={commentText}
                     onChange={e => setCommentText(e.target.value)}
+                    placeholder="Add to the discussion"
+                    className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    rows="3"
                   />
                   <button
                     type="submit"
-                    className="mt-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
                     disabled={!commentText.trim()}
                   >
-                    Post Comment
+                    <ChatBubbleLeftIcon className="w-5 h-5" />
+                    <span>Post Comment</span>
                   </button>
                 </form>
 
-                <div className="space-y-6">
+                <div className="space-y-4">
                   {loadingComments ? (
                     <div className="text-center text-gray-500">Loading comments...</div>
                   ) : comments.length > 0 ? (
                     comments.map(comment => (
-                      <div key={comment.id} className="flex space-x-4">
-                        <div className="flex-shrink-0">
-                          <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
-                            <span className="text-gray-600 font-semibold">
-                              {comment.user?.full_name?.charAt(0).toUpperCase() || comment.user?.email?.charAt(0).toUpperCase() || "U"}
-                            </span>
+                      <div key={comment.id} className="bg-white p-4 rounded-lg shadow-sm">
+                        <div className="flex items-start space-x-3">
+                          <div className="flex-shrink-0">
+                            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                              <UserIcon className="w-6 h-6 text-blue-600" />
+                            </div>
                           </div>
-                        </div>
-                        <div className="flex-grow">
-                          <div className="flex items-center space-x-2">
-                            <span className="font-semibold">{comment.user?.full_name || comment.user?.email || "Unknown User"}</span>
-                            <span className="text-gray-500 text-sm">{new Date(comment.created_at).toLocaleDateString()}</span>
+                          <div className="flex-grow">
+                            <div className="flex items-center space-x-2">
+                              <span className="font-medium text-gray-800">
+                                {comment.user?.full_name || comment.user?.email || "Anonymous"}
+                              </span>
+                              <span className="text-sm text-gray-500">
+                                {new Date(comment.created_at).toLocaleDateString()}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-gray-600">{comment.content}</p>
                           </div>
-                          <p className="mt-1 text-gray-700">{comment.content}</p>
                         </div>
                       </div>
                     ))
                   ) : (
-                    <p className="text-gray-500 text-center">No comments yet. Be the first to comment!</p>
+                    <p className="text-center text-gray-500">No comments yet. Be the first to comment!</p>
                   )}
                 </div>
               </div>
@@ -400,7 +443,10 @@ const CourseContent = () => {
           </div>
         ) : (
           <div className="flex items-center justify-center h-full">
-            <p className="text-gray-500">Select a lesson to begin</p>
+            <div className="text-center">
+              <BookOpenIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-600">Select a lesson to begin learning</p>
+            </div>
           </div>
         )}
       </div>
