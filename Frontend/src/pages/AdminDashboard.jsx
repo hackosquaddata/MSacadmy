@@ -6,8 +6,10 @@ import {
   AcademicCapIcon,
   ChartBarIcon,
   FolderOpenIcon,
-  CloudArrowUpIcon
+  CloudArrowUpIcon,
+  ArrowLeftOnRectangleIcon // Add this import
 } from '@heroicons/react/24/outline';
+import { toast } from 'react-hot-toast'; // Import toast
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -23,31 +25,46 @@ export default function AdminDashboard() {
 
   const token = localStorage.getItem("token"); // ✅ read token from localStorage
 
-  // Fetch courses
+  // Fetch courses and stats
   useEffect(() => {
-    const fetchCourses = async () => {
+    const fetchDashboardData = async () => {
       try {
-        const response = await fetch("http://localhost:3000/api/admin/courses", {
-          method: "GET",
+        // Fetch courses
+        const coursesResponse = await fetch("http://localhost:3000/api/admin/courses", {
           headers: {
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`, // pass token
+            "Authorization": `Bearer ${token}`,
           },
         });
 
-        if (!response.ok) {
-          throw new Error("Failed to fetch courses");
+        // Fetch stats
+        const statsResponse = await fetch("http://localhost:3000/api/admin/dashboard/stats", {
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`,
+          },
+        });
+
+        if (!coursesResponse.ok || !statsResponse.ok) {
+          throw new Error("Failed to fetch dashboard data");
         }
 
-        const data = await response.json();
-        setCourses(data);
-        setStats(prev => ({ ...prev, totalCourses: data.length }));
+        const coursesData = await coursesResponse.json();
+        const statsData = await statsResponse.json();
+
+        setCourses(coursesData);
+        setStats({
+          totalCourses: coursesData.length,
+          totalStudents: statsData.totalStudents,
+          totalRevenue: `₹${statsData.totalRevenue}`,
+          activeUsers: statsData.totalStudents // Using same number for active users
+        });
       } catch (error) {
-        console.error("Error fetching courses:", error);
+        console.error("Error fetching dashboard data:", error);
       }
     };
 
-    if (token) fetchCourses();
+    if (token) fetchDashboardData();
   }, [token]);
 
   // Delete course
@@ -75,20 +92,41 @@ export default function AdminDashboard() {
     }
   };
 
+  // Add sign out handler
+  const handleSignOut = () => {
+    // Clear all auth-related data
+    localStorage.clear();
+    // Show success message
+    toast.success('Signed out successfully');
+    // Redirect to login page
+    window.location.href = '/login';
+  };
+
   return (
     <div className="min-h-screen bg-gray-100">
       <div className="py-6">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Header */}
+          {/* Header - Updated with sign out button */}
           <div className="flex justify-between items-center mb-8">
             <h1 className="text-2xl font-semibold text-gray-900">Admin Dashboard</h1>
-            <button
-              onClick={() => navigate('/admin/create-course')}
-              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-            >
-              <PlusIcon className="h-5 w-5 mr-2" />
-              Create Course
-            </button>
+            <div className="flex items-center space-x-4">
+              <button
+                onClick={() => navigate('/admin/create-course')}
+                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                <PlusIcon className="h-5 w-5 mr-2" />
+                Create Course
+              </button>
+
+              {/* Sign Out Button */}
+              <button
+                onClick={handleSignOut}
+                className="inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+              >
+                <ArrowLeftOnRectangleIcon className="h-5 w-5 mr-2" />
+                Sign Out
+              </button>
+            </div>
           </div>
 
           {/* Stats */}

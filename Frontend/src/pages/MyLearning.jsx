@@ -79,7 +79,7 @@ export default function MyLearning() {
           <div className="text-center py-12">
             <h3 className="text-xl text-gray-600">You haven't enrolled in any courses yet.</h3>
             <button
-              onClick={() => navigate('/courses')}
+              onClick={() => navigate('/dashboard')}
               className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
             >
               Browse Courses

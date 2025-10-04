@@ -15,6 +15,8 @@ import MyLearning from './pages/MyLearning';
 import UserProfile from './pages/UserProfile';
 import EditCourse from './pages/Editcourse'
 import AdminCourseContent from './pages/AdminCourseContent'; // Import the new component
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword'; // Import the ResetPassword component
 
 function App() {
   return (
@@ -43,6 +45,8 @@ function App() {
           <Navigate to="/dashboard" replace /> : 
           <Signup />
         } />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} /> {/* Reset password route */}
 
         {/* Protected routes for regular users */}
         <Route
