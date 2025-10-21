@@ -6,7 +6,8 @@ import {
   getCourse,
   checkCourseAccess,
   getEnrolledCourses,
-  forgotPassword
+  forgotPassword,
+  getCourseById
 } from "../controllers/User.controller.js";
 const router = Router();
 
@@ -27,6 +28,8 @@ router.get("/enrolled-courses", (req, res, next) => {
   next();
 }, getEnrolledCourses);
 router.get('/courses/:courseId/access', checkCourseAccess);
+router.get('/courses/:courseId', getCourseById);
 router.post("/forgot-password", forgotPassword);
+
 
 export default router;

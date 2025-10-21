@@ -89,7 +89,7 @@ const updateProgress = async (req, res) => {
         content_id: contentId,
         completed: completed ?? false,
         watch_time: watchTime ?? 0
-      })
+      }, { onConflict: 'user_id,content_id' })
       .select()
       .single();
 

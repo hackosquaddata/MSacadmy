@@ -5,7 +5,21 @@ const supabase = connectSupabase();
 const supabaseAdmin = connectSupabaseAdmin();
 
 const storage = multer.memoryStorage();
-export const upload = multer({ storage });
+// Allow only expected mimetypes and cap file size (200MB)
+const allowedTypes = new Set([
+  'image/jpeg', 'image/png', 'image/webp',
+  'video/mp4', 'video/webm', 'video/ogg',
+  'application/pdf'
+]);
+export const upload = multer({
+  storage,
+  limits: { fileSize: 200 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!file.mimetype) return cb(null, false);
+    if (allowedTypes.has(file.mimetype) || file.mimetype.startsWith('video/')) return cb(null, true);
+    return cb(new Error('Unsupported file type'));
+  }
+});
 
 const createCourse = async (req, res) => {
   try {
@@ -20,8 +34,8 @@ const createCourse = async (req, res) => {
       return res.status(401).json({ message: "Unauthorized - Invalid token" });
     }
 
-    // Verify if user is admin
-    const { data: userRecord, error: userError } = await supabase
+    // Verify if user is admin (use service-role client to bypass RLS)
+    const { data: userRecord, error: userError } = await supabaseAdmin
       .from("users")
       .select("is_admin")
       .eq("id", user.id)
@@ -31,60 +45,179 @@ const createCourse = async (req, res) => {
       return res.status(403).json({ message: "Forbidden - Admin access required" });
     }
 
-    const { title, description, price, category, prerequisites, objectives } = req.body;
-    const thumbnailFile = req.file;
+  const { title, description, price, category, prerequisites, objectives, duration, instructors } = req.body;
+    // Using upload.fields in routes, files are in req.files
+    const thumbnailFile = req.files?.thumbnail?.[0];
+    const certPreviewFile = req.files?.certification_preview?.[0];
 
-    if (!title || !price) {
-      return res.status(400).json({ message: "Title and price are required" });
+    if (!title || !price || !description || !category) {
+      return res.status(400).json({ message: "Title, price, description and category are required" });
     }
 
-    let thumbnailUrl = null;
+  let thumbnailUrl = null;
+  let certPreviewUrl = null;
 
     if (thumbnailFile) {
-      const fileExt = thumbnailFile.originalname.split(".").pop();
-      const fileName = `course-thumbnails/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+  const bucket = 'course-thumbnails';
+      const fileExt = thumbnailFile.originalname.split('.').pop();
+      const fileName = `${bucket}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
 
-      const { error: uploadError } = await supabaseAdmin.storage
-        .from("course-thumbnails")
-        .upload(fileName, thumbnailFile.buffer, {
-          contentType: thumbnailFile.mimetype,
-          upsert: false
-        });
+      // Try upload, and create bucket if missing then retry once
+      const tryUpload = async () => {
+        const { error } = await supabaseAdmin.storage
+          .from(bucket)
+          .upload(fileName, thumbnailFile.buffer, {
+            contentType: thumbnailFile.mimetype,
+            upsert: false,
+          });
+        return { error };
+      };
+
+      let { error: uploadError } = await tryUpload();
+      if (uploadError) {
+        const msg = uploadError?.message || '';
+        if (/not found|does not exist|No such file or directory/i.test(msg)) {
+          try {
+            // Create public bucket then retry
+            await supabaseAdmin.storage.createBucket(bucket, { public: true });
+            ({ error: uploadError } = await tryUpload());
+          } catch (e) {
+            console.error('Bucket creation failed:', e);
+          }
+        }
+      }
 
       if (uploadError) {
-        console.error("Thumbnail upload error:", uploadError);
-        return res.status(500).json({ message: "Failed to upload thumbnail" });
+        console.error('Thumbnail upload error:', uploadError);
+        return res.status(500).json({ message: 'Failed to upload thumbnail', details: uploadError.message });
       }
 
       const { data: publicUrlData } = supabaseAdmin.storage
-        .from("course-thumbnails")
+        .from(bucket)
         .getPublicUrl(fileName);
-
       thumbnailUrl = publicUrlData.publicUrl;
+    }
+    // If no thumbnail uploaded, use a safe default to satisfy NOT NULL schema
+    if (!thumbnailUrl) {
+      thumbnailUrl = 'https://placehold.co/600x400?text=Course';
+    }
+
+    // Optional certification preview upload
+    if (certPreviewFile) {
+      const bucket = 'course-certifications';
+      const fileExt = certPreviewFile.originalname.split('.').pop();
+      const fileName = `${bucket}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+      const tryUpload = async () => {
+        const { error } = await supabaseAdmin.storage
+          .from(bucket)
+          .upload(fileName, certPreviewFile.buffer, {
+            contentType: certPreviewFile.mimetype,
+            upsert: false,
+          });
+        return { error };
+      };
+
+      let { error: uploadError } = await tryUpload();
+      if (uploadError) {
+        const msg = uploadError?.message || '';
+        if (/not found|does not exist|No such file or directory/i.test(msg)) {
+          try {
+            await supabaseAdmin.storage.createBucket(bucket, { public: true });
+            ({ error: uploadError } = await tryUpload());
+          } catch (e) {
+            console.error('Bucket creation failed (cert):', e);
+          }
+        }
+      }
+
+      if (uploadError) {
+        console.error('Certification preview upload error:', uploadError);
+      } else {
+        const { data: publicUrlData } = supabaseAdmin.storage
+          .from(bucket)
+          .getPublicUrl(fileName);
+        certPreviewUrl = publicUrlData.publicUrl;
+      }
+    }
+
+    // Normalize prerequisites: store as text to match current schema (NOT NULL text)
+    let prerequisitesValue = '';
+    try {
+      if (typeof prerequisites === 'string') prerequisitesValue = prerequisites.trim();
+      else if (Array.isArray(prerequisites)) prerequisitesValue = prerequisites.filter(Boolean).join(', ');
+    } catch (e) { prerequisitesValue = ''; }
+
+  let parsedObjectives = [];
+    try {
+      if (typeof objectives === 'string' && objectives.trim()) parsedObjectives = JSON.parse(objectives);
+      else if (Array.isArray(objectives)) parsedObjectives = objectives;
+    } catch (e) {
+      parsedObjectives = [];
+    }
+
+    // Normalize instructors to array of strings if provided
+    let parsedInstructors = null;
+    try {
+      if (typeof instructors === 'string' && instructors.trim()) {
+        // Either JSON array string or single value comma-separated
+        try {
+          const maybeJson = JSON.parse(instructors);
+          parsedInstructors = Array.isArray(maybeJson) ? maybeJson : [String(maybeJson)];
+        } catch {
+          parsedInstructors = instructors.split(',').map(s => s.trim()).filter(Boolean);
+        }
+      } else if (Array.isArray(instructors)) {
+        parsedInstructors = instructors;
+      }
+    } catch (e) {
+      parsedInstructors = null;
     }
 
     // Create course with actual user ID
-    const { data: course, error: courseError } = await supabaseAdmin
-      .from("courses")
-      .insert([
-        {
+    let insertPayload = {
           title,
           description: description || null,
           price: parseFloat(price),
           category: category || null,
-          prerequisites: prerequisites || null,
-          objectives: objectives ? JSON.parse(objectives) : null,
+      prerequisites: prerequisitesValue || '',
+          objectives: parsedObjectives,
           thumbnail: thumbnailUrl,
+          certification_preview: certPreviewUrl || null,
+          instructors: parsedInstructors,
           created_by: user.id, // Use actual user ID instead of DUMMY_USER_ID
           status: 'active'
-        }
-      ])
+        };
+    let { data: course, error: courseError } = await supabaseAdmin
+      .from('courses')
+      .insert([ insertPayload ])
       .select()
       .single();
 
     if (courseError) {
+      // Retry without optional columns if schema doesn't have them
+      const msg = courseError?.message || '';
+      const code = courseError?.code || '';
+      const isUndefinedColumn = code === '42703' || /undefined column|column .* does not exist/i.test(msg);
+      if (isUndefinedColumn) {
+        const minimal = { ...insertPayload };
+        delete minimal.certification_preview;
+        delete minimal.instructors;
+        delete minimal.duration;
+        ({ data: course, error: courseError } = await supabaseAdmin
+          .from('courses')
+          .insert([ minimal ])
+          .select()
+          .single());
+      }
+    }
+
+    if (courseError) {
       console.error("Course creation error:", courseError);
-      return res.status(500).json({ message: "Failed to create course" });
+      return res.status(500).json({
+        message: "Failed to create course",
+        details: courseError?.message || courseError
+      });
     }
 
     res.status(201).json({
@@ -96,7 +229,7 @@ const createCourse = async (req, res) => {
     console.error("Course creation error:", err);
     res.status(500).json({
       message: "Internal server error",
-      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+      details: err?.message
     });
   }
 };
@@ -104,24 +237,35 @@ const createCourse = async (req, res) => {
 // Delete a course
 const deleteCourse = async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(" ")[1];
+    // Debug: show masked Authorization header for troubleshooting
+    const authHeader = req.headers.authorization;
+    console.log('DELETE /api/admin/courses/:id - Authorization header:', authHeader ? `${authHeader.substring(0, 20)}...` : authHeader);
+
+    const token = authHeader?.split(" ")[1];
     if (!token) {
+      console.warn('Unauthorized: No token provided in Authorization header');
       return res.status(401).json({ message: "Unauthorized - No token provided" });
     }
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    const { data: getUserData, error: authError } = await supabase.auth.getUser(token);
+    console.log('supabase.auth.getUser result:', { user: getUserData?.user ? { id: getUserData.user.id, email: getUserData.user.email } : null, authError });
+
+    const user = getUserData?.user;
     if (authError || !user) {
+      console.warn('Unauthorized: supabase.auth.getUser failed or returned no user', authError);
       return res.status(401).json({ message: "Unauthorized - Invalid token" });
     }
 
-    const { data: userRecord } = await supabase
+    // Fetch full user record using admin client (bypass RLS)
+    const { data: userRecord } = await supabaseAdmin
       .from("users")
       .select("*")
       .eq("id", user.id)
       .single();
 
     if (!userRecord?.is_admin) {
-      return res.status(403).json({ message: "Forbidden - Admin access required" });
+      console.warn('Forbidden: user is not admin in users table', { authUserId: user.id, userRecord });
+      return res.status(403).json({ message: "Forbidden - Admin access required. Check users table is_admin for this user." });
     }
 
     const { id } = req.params;
@@ -202,7 +346,8 @@ const editCourse = async (req, res) => {
       return res.status(401).json({ message: "Unauthorized - Invalid token" });
     }
 
-    const { data: userRecord } = await supabase
+    // Use admin client to read users table for edit permissions
+    const { data: userRecord } = await supabaseAdmin
       .from("users")
       .select("*")
       .eq("id", user.id)
@@ -213,12 +358,28 @@ const editCourse = async (req, res) => {
     }
 
     const { id } = req.params;
-    const { title, description, price, category, prerequisites, objectives } = req.body;
-    const thumbnailFile = req.file;
+  const { title, description, price, category, prerequisites, objectives, duration, instructors } = req.body;
+    const thumbnailFile = req.files?.thumbnail?.[0];
+    const certPreviewFile = req.files?.certification_preview?.[0];
 
-    // Validate required fields
-    if (!title || !description || !price || !category || !prerequisites || !objectives) {
-      return res.status(400).json({ message: "All fields are required" });
+    // Validate required fields: require at minimum title, price, description, category
+    if (!title || !price || !description || !category) {
+      return res.status(400).json({ message: "Title, price, description and category are required" });
+    }
+
+    // Normalize prerequisites as text for current schema
+    let prerequisitesValue = '';
+    try {
+      if (typeof prerequisites === 'string') prerequisitesValue = prerequisites.trim();
+      else if (Array.isArray(prerequisites)) prerequisitesValue = prerequisites.filter(Boolean).join(', ');
+    } catch (e) { prerequisitesValue = ''; }
+
+    let parsedObjectives = [];
+    try {
+      if (typeof objectives === 'string' && objectives.trim()) parsedObjectives = JSON.parse(objectives);
+      else if (Array.isArray(objectives)) parsedObjectives = objectives;
+    } catch (e) {
+      parsedObjectives = [];
     }
 
     let updates = {
@@ -226,8 +387,9 @@ const editCourse = async (req, res) => {
       description,
       price: Number(price),
       category,
-      prerequisites,
-      objectives: typeof objectives === 'string' ? JSON.parse(objectives) : objectives
+      prerequisites: prerequisitesValue,
+      objectives: parsedObjectives,
+      // duration omitted; column may not exist in current schema
     };
 
     // If new thumbnail is provided, upload it
@@ -253,14 +415,64 @@ const editCourse = async (req, res) => {
       updates.thumbnail = publicUrlData.publicUrl;
     }
 
-    const { data, error } = await supabaseAdmin
+    // If new certification preview provided, upload
+    if (certPreviewFile) {
+      const fileExt = certPreviewFile.originalname.split(".").pop();
+      const fileName = `certifications/${Date.now()}.${fileExt}`;
+      const { error: uploadError } = await supabaseAdmin.storage
+        .from("course-certifications")
+        .upload(fileName, certPreviewFile.buffer, {
+          contentType: certPreviewFile.mimetype,
+          upsert: false
+        });
+      if (!uploadError) {
+        const { data: publicUrlData } = supabaseAdmin.storage
+          .from("course-certifications")
+          .getPublicUrl(fileName);
+        updates.certification_preview = publicUrlData.publicUrl;
+      }
+    }
+
+    // Instructors
+    if (typeof instructors !== 'undefined') {
+      try {
+        let parsed = null;
+        if (typeof instructors === 'string' && instructors.trim()) {
+          try { parsed = JSON.parse(instructors); }
+          catch { parsed = instructors.split(',').map(s => s.trim()).filter(Boolean); }
+        } else if (Array.isArray(instructors)) parsed = instructors;
+        updates.instructors = parsed;
+      } catch {}
+    }
+
+    let { data, error } = await supabaseAdmin
       .from("courses")
       .update(updates)
       .eq("id", id)
       .select()
       .single();
-
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) {
+      // Retry without optional columns if undefined_column
+      const msg = error?.message || '';
+      const code = error?.code || '';
+      const isUndefinedColumn = code === '42703' || /undefined column|column .* does not exist/i.test(msg);
+      if (isUndefinedColumn) {
+        const minimal = { ...updates };
+        delete minimal.certification_preview;
+        delete minimal.instructors;
+        delete minimal.duration;
+        ({ data, error } = await supabaseAdmin
+          .from('courses')
+          .update(minimal)
+          .eq('id', id)
+          .select()
+          .single());
+      }
+    }
+    if (error) {
+      console.error('Course update DB error:', error);
+      return res.status(400).json({ error: error.message, details: process.env.NODE_ENV === 'development' ? error : undefined });
+    }
     if (!data) return res.status(404).json({ error: "Course not found" });
 
     res.status(200).json({
@@ -315,6 +527,17 @@ const getCourseContents = async (req, res) => {
 // Upload course content
 const uploadCourseContent = async (req, res) => {
   try {
+    // Admin auth check
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(401).json({ message: 'Unauthorized' });
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !user) return res.status(401).json({ message: 'Invalid token' });
+    const { data: userRecord } = await supabaseAdmin
+      .from('users')
+      .select('is_admin')
+      .eq('id', user.id)
+      .single();
+    if (!userRecord?.is_admin) return res.status(403).json({ message: 'Forbidden' });
     const { courseId } = req.params;
     const { 
       module_name, 
@@ -336,25 +559,48 @@ const uploadCourseContent = async (req, res) => {
       is_preview: is_preview === 'true',
     };
 
-    // Handle YouTube video
-    if (embed_url) {
-      const videoId = embed_url.includes('watch?v=') 
-        ? embed_url.split('watch?v=')[1]
-        : embed_url.includes('youtu.be/') 
-          ? embed_url.split('youtu.be/')[1]
-          : embed_url;
-          
-      // Clean up video ID by removing any extra parameters
-      const cleanVideoId = videoId.split('&')[0];
-      
+  // Handle Dailymotion video
+  if (embed_url) {
+      let idCandidate = embed_url.trim();
+      try {
+        if (/dailymotion\.com\/video\//i.test(embed_url)) {
+          // e.g., https://www.dailymotion.com/video/x7u5g4_example?param=1
+          const after = embed_url.split('/video/')[1] || '';
+          idCandidate = after.split(/[\?_]/)[0];
+        } else if (/dai\.ly\//i.test(embed_url)) {
+          // e.g., https://dai.ly/x7u5g4
+          const after = embed_url.split('dai.ly/')[1] || '';
+          idCandidate = after.split(/[\?]/)[0];
+        }
+        // else: if it's already an ID, keep as-is
+      } catch {}
+
+      // Build Dailymotion embed URL
+      const cleanId = (idCandidate || '').replace(/[^a-zA-Z0-9]/g, '');
       contentData.file_type = 'video';
-      contentData.embed_url = `https://www.youtube.com/embed/${cleanVideoId}`;
+      contentData.embed_url = `https://www.dailymotion.com/embed/video/${cleanId}`;
       contentData.file_url = null;
+    }
+    // Handle MCQ Quiz JSON (no file)
+    else if (req.body && req.body.quiz) {
+      try {
+        const quizJson = typeof req.body.quiz === 'string' ? JSON.parse(req.body.quiz) : req.body.quiz;
+        contentData.file_type = 'quiz';
+        contentData.quiz = quizJson;
+        contentData.embed_url = null;
+        contentData.file_url = null;
+      } catch (e) {
+        console.error('Invalid quiz JSON payload:', e);
+        return res.status(400).json({ message: 'Invalid quiz payload' });
+      }
     }
     // Handle file upload
     else if (req.file) {
       try {
-        const fileName = `${courseId}/${Date.now()}-${req.file.originalname}`;
+        const safeName = String(req.file.originalname || 'file')
+          .replace(/[^a-zA-Z0-9._-]/g, '_')
+          .slice(0, 100);
+        const fileName = `${courseId}/${Date.now()}-${safeName}`;
         const { error: uploadError } = await supabaseAdmin.storage
           .from('course-content')
           .upload(fileName, req.file.buffer, {
@@ -384,6 +630,8 @@ const uploadCourseContent = async (req, res) => {
           details: uploadError.message 
         });
       }
+    } else {
+      return res.status(400).json({ message: 'No content provided (video URL, quiz, or file required)' });
     }
 
     // Insert content
@@ -408,6 +656,17 @@ const uploadCourseContent = async (req, res) => {
 // Delete course content
 const deleteCourseContent = async (req, res) => {
   try {
+    // Admin auth check
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(401).json({ message: 'Unauthorized' });
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !user) return res.status(401).json({ message: 'Invalid token' });
+    const { data: userRecord } = await supabaseAdmin
+      .from('users')
+      .select('is_admin')
+      .eq('id', user.id)
+      .single();
+    if (!userRecord?.is_admin) return res.status(403).json({ message: 'Forbidden' });
     const { contentId } = req.params;
 
     // Get content info first to delete file if exists
@@ -454,12 +713,17 @@ const deleteCourseContent = async (req, res) => {
 // Get dashboard statistics
 const getDashboardStats = async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(" ")[1];
-    if (!token) return res.status(401).json({ message: "Unauthorized" });
-
-    // Verify admin user
+    // Admin auth check
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(401).json({ message: 'Unauthorized' });
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    if (authError || !user) return res.status(401).json({ message: "Invalid token" });
+    if (authError || !user) return res.status(401).json({ message: 'Invalid token' });
+    const { data: userRecord } = await supabaseAdmin
+      .from('users')
+      .select('is_admin')
+      .eq('id', user.id)
+      .single();
+    if (!userRecord?.is_admin) return res.status(403).json({ message: 'Forbidden' });
 
     // Get total number of unique students from enrollments
     const { data: students, error: studentsError } = await supabaseAdmin
@@ -509,4 +773,125 @@ export {
   getCourseContents, 
   deleteCourseContent,
   getDashboardStats
+};
+
+export { listEnrollmentsByCourse, revokeEnrollment };
+
+// List enrollments for a specific course (admin)
+const listEnrollmentsByCourse = async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(401).json({ message: 'Unauthorized' });
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !user) return res.status(401).json({ message: 'Invalid token' });
+
+    const { data: userRecord } = await supabaseAdmin
+      .from('users')
+      .select('is_admin')
+      .eq('id', user.id)
+      .single();
+
+    if (!userRecord?.is_admin) return res.status(403).json({ message: 'Forbidden' });
+
+    const { courseId } = req.params;
+
+    // Preferred: use FK relationships if present
+    let { data, error } = await supabaseAdmin
+      .from('enrollments')
+      .select('id, user_id, status, created_at, courses(id,title,thumbnail), users(id,full_name,email)')
+      .eq('course_id', courseId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.warn('Enrollments join failed, falling back to manual enrichment:', error?.message || error);
+      // Fallback: fetch base enrollments, then hydrate user and course info
+      const { data: base, error: baseErr } = await supabaseAdmin
+        .from('enrollments')
+        .select('id, user_id, status, created_at, course_id')
+        .eq('course_id', courseId)
+        .order('created_at', { ascending: false });
+      if (baseErr) {
+        console.error('Base enrollments fetch error:', baseErr);
+        return res.status(500).json({ message: 'Failed to fetch enrollments' });
+      }
+
+      // Fetch course once
+      let course = null;
+      const { data: courseRow } = await supabaseAdmin
+        .from('courses')
+        .select('id,title,thumbnail')
+        .eq('id', courseId)
+        .single();
+      if (courseRow) course = courseRow;
+
+      // Fetch user records in batch
+      const userIds = Array.from(new Set((base || []).map(r => r.user_id).filter(Boolean)));
+      let usersMap = new Map();
+      if (userIds.length) {
+        const { data: usersRows } = await supabaseAdmin
+          .from('users')
+          .select('id, full_name, email')
+          .in('id', userIds);
+        if (usersRows) {
+          for (const u of usersRows) usersMap.set(u.id, u);
+        }
+      }
+
+      data = (base || []).map(r => ({
+        id: r.id,
+        user_id: r.user_id,
+        status: r.status,
+        created_at: r.created_at,
+        courses: course ? { id: course.id, title: course.title, thumbnail: course.thumbnail } : null,
+        users: usersMap.get(r.user_id) || null,
+      }));
+    }
+
+    // Normalize keys to match frontend expectations (en.user and en.course)
+    const normalized = (data || []).map(row => ({
+      id: row.id,
+      user_id: row.user_id,
+      status: row.status,
+      created_at: row.created_at,
+      user: row.user || row.users || null,
+      course: row.course || row.courses || null,
+    }));
+
+    res.json(normalized);
+  } catch (err) {
+    console.error('listEnrollmentsByCourse error:', err);
+    res.status(500).json({ message: 'Failed to fetch enrollments' });
+  }
+};
+
+// Revoke (delete) an enrollment by ID (admin)
+const revokeEnrollment = async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(401).json({ message: 'Unauthorized' });
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !user) return res.status(401).json({ message: 'Invalid token' });
+
+    const { data: userRecord } = await supabaseAdmin
+      .from('users')
+      .select('is_admin')
+      .eq('id', user.id)
+      .single();
+
+    if (!userRecord?.is_admin) return res.status(403).json({ message: 'Forbidden' });
+
+    const { enrollmentId } = req.params;
+    const { error } = await supabaseAdmin
+      .from('enrollments')
+      .delete()
+      .eq('id', enrollmentId);
+
+    if (error) return res.status(500).json({ message: 'Failed to revoke enrollment' });
+    res.json({ message: 'Enrollment revoked' });
+  } catch (err) {
+    console.error('revokeEnrollment error:', err);
+    res.status(500).json({ message: 'Failed to revoke enrollment' });
+  }
 };

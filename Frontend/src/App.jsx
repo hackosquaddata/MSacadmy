@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'rea
 import { Toaster } from 'react-hot-toast';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
+import Landing from './pages/Landing';
 import CourseDashboard from './pages/Coursedashboard';
 import CourseDetails from './pages/CourseDetails';
 import AdminDashboard from './pages/AdminDashboard';
@@ -41,12 +42,9 @@ function App() {
         <Route path="/" element={
           (() => {
             const token = localStorage.getItem('token');
-            if (!token) return <Navigate to="/login" replace />;
-            
+            if (!token) return <Landing />;
             const user = JSON.parse(localStorage.getItem('user') || '{}');
-            return user.is_admin === true ? 
-              <Navigate to="/admin/dashboard" replace /> : 
-              <Navigate to="/dashboard" replace />;
+            return user.is_admin === true ? <Navigate to="/admin/dashboard" replace /> : <Navigate to="/dashboard" replace />;
           })()
         } />
         <Route path="/login" element={

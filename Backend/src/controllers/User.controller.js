@@ -199,6 +199,23 @@ const getCourse = async (req,res)=>{
 
 }
 
+const getCourseById = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const { data, error } = await supabase
+      .from('courses')
+      .select('*')
+      .eq('id', courseId)
+      .single();
+
+    if (error) return res.status(404).json({ message: 'Course not found', error: error.message });
+    res.status(200).json(data);
+  } catch (err) {
+    console.error('getCourseById error:', err);
+    res.status(500).json({ message: 'Failed to fetch course', error: err.message });
+  }
+};
+
 const checkCourseAccess = async (req, res) => {
   console.log('Starting course access check');
   try {
@@ -528,5 +545,6 @@ export {
   getCourse,
   checkCourseAccess,
   getEnrolledCourses,
-  forgotPassword 
+  forgotPassword,
+  getCourseById
 };
