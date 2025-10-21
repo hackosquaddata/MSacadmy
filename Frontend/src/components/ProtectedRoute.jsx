@@ -1,5 +1,6 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useEffect } from 'react';
+import { apiUrl } from '../lib/api';
 
 const ProtectedRoute = ({ children, adminOnly = false }) => {
   const token = localStorage.getItem('token');
@@ -14,7 +15,7 @@ const ProtectedRoute = ({ children, adminOnly = false }) => {
   useEffect(() => {
     // Validate token on mount
     if (token) {
-      fetch('http://localhost:3000/api/auth/v1/me', {
+      fetch(apiUrl('/api/auth/v1/me'), {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/json'

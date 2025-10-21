@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import toast from "react-hot-toast";
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
+import { apiUrl } from '../lib/api';
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
@@ -13,7 +14,7 @@ export default function ForgotPassword() {
     setLoading(true);
 
     try {
-      const response = await fetch("http://localhost:3000/api/auth/v1/forgot-password", {
+      const response = await fetch(apiUrl('/api/auth/v1/forgot-password'), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

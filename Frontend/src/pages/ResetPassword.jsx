@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
+import { apiUrl } from '../lib/api';
 
 export default function ResetPassword() {
   const [searchParams] = useSearchParams();
@@ -38,7 +39,7 @@ export default function ResetPassword() {
     setLoading(true);
 
     try {
-      const response = await fetch("http://localhost:3000/api/auth/v1/reset-password", {
+      const response = await fetch(apiUrl('/api/auth/v1/reset-password'), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

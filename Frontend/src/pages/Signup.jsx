@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
+import { apiUrl } from '../lib/api';
 
 export default function Signup() {
   const [formData, setFormData] = useState({
@@ -16,7 +17,7 @@ export default function Signup() {
     setLoading(true);
 
     try {
-      const response = await fetch("http://localhost:3000/api/auth/v1/signup", {
+      const response = await fetch(apiUrl('/api/auth/v1/signup'), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

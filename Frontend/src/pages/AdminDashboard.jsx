@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import AdminLayout from '../components/AdminLayout';
+import { apiUrl } from '../lib/api';
 import {
   PlusIcon,
   UsersIcon,
@@ -7,9 +9,8 @@ import {
   ChartBarIcon,
   FolderOpenIcon,
   CloudArrowUpIcon,
-  ArrowLeftOnRectangleIcon // Add this import
 } from '@heroicons/react/24/outline';
-import { toast } from 'react-hot-toast'; // Import toast
+import { toast } from 'react-hot-toast';
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -22,15 +23,19 @@ export default function AdminDashboard() {
 
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [enrollmentsModalOpen, setEnrollmentsModalOpen] = useState(false);
+  const [selectedCourseEnrollments, setSelectedCourseEnrollments] = useState([]);
+  const [selectedCourseTitle, setSelectedCourseTitle] = useState('');
+  const [couponStats, setCouponStats] = useState({});
 
-  const token = localStorage.getItem("token"); // ✅ read token from localStorage
+  const token = localStorage.getItem("token");
 
   // Fetch courses and stats
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
         // Fetch courses
-        const coursesResponse = await fetch("http://localhost:3000/api/admin/courses", {
+        const coursesResponse = await fetch(apiUrl('/api/admin/courses'), {
           headers: {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${token}`,
@@ -38,19 +43,28 @@ export default function AdminDashboard() {
         });
 
         // Fetch stats
-        const statsResponse = await fetch("http://localhost:3000/api/admin/dashboard/stats", {
+        const statsResponse = await fetch(apiUrl('/api/admin/dashboard/stats'), {
           headers: {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${token}`,
           },
         });
 
-        if (!coursesResponse.ok || !statsResponse.ok) {
+        // Coupon stats (admin-only)
+        const couponRes = await fetch(apiUrl('/api/payments/coupons/stats'), {
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`,
+          },
+        });
+
+        if (!coursesResponse.ok || !statsResponse.ok || !couponRes.ok) {
           throw new Error("Failed to fetch dashboard data");
         }
 
         const coursesData = await coursesResponse.json();
         const statsData = await statsResponse.json();
+        const couponData = await couponRes.json();
 
         setCourses(coursesData);
         setStats({
@@ -59,6 +73,7 @@ export default function AdminDashboard() {
           totalRevenue: `₹${statsData.totalRevenue}`,
           activeUsers: statsData.totalStudents // Using same number for active users
         });
+        setCouponStats(couponData.stats || {});
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
       }
@@ -73,7 +88,7 @@ export default function AdminDashboard() {
 
     setLoading(true);
     try {
-      const response = await fetch(`http://localhost:3000/api/admin/courses/${courseId}`, {
+      const response = await fetch(apiUrl(`/api/admin/courses/${courseId}`), {
         method: "DELETE",
         headers: {
           "Content-Type": "application/json",
@@ -92,247 +107,278 @@ export default function AdminDashboard() {
     }
   };
 
-  // Add sign out handler
-  const handleSignOut = () => {
-    // Clear all auth-related data
-    localStorage.clear();
-    // Show success message
-    toast.success('Signed out successfully');
-    // Redirect to login page
-    window.location.href = '/login';
-  };
-
   return (
-    <div className="min-h-screen bg-gray-100">
-      <div className="py-6">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Header - Updated with sign out button */}
-          <div className="flex justify-between items-center mb-8">
-            <h1 className="text-2xl font-semibold text-gray-900">Admin Dashboard</h1>
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={() => navigate('/admin/create-course')}
-                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-              >
-                <PlusIcon className="h-5 w-5 mr-2" />
-                Create Course
-              </button>
-
-              {/* Sign Out Button */}
-              <button
-                onClick={handleSignOut}
-                className="inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
-              >
-                <ArrowLeftOnRectangleIcon className="h-5 w-5 mr-2" />
-                Sign Out
-              </button>
-            </div>
+    <AdminLayout title="Admin Dashboard">
+      {/* Coupon usage chips */}
+      {couponStats && Object.keys(couponStats).length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          {Object.entries(couponStats).map(([code, count]) => (
+            <span key={code} className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs bg-emerald-500/10 border border-emerald-400/30 text-emerald-200">
+              <span className="font-semibold">{code}</span>
+              <span className="opacity-80">{count}</span>
+            </span>
+          ))}
+          <button
+            onClick={() => navigate('/admin/coupons')}
+            className="ml-2 px-3 py-1.5 rounded-lg text-xs bg-white/5 text-slate-200 border border-white/10 hover:bg-white/10"
+          >View details</button>
+        </div>
+      )}
+      {/* Stat cards */}
+  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        {[{
+          label: 'Total Courses',
+          value: stats.totalCourses,
+          Icon: AcademicCapIcon,
+          color: 'from-emerald-600/15 to-emerald-400/10',
+          ring: 'ring-emerald-400/40'
+        },{
+          label: 'Total Students',
+          value: stats.totalStudents,
+          Icon: UsersIcon,
+          color: 'from-emerald-600/15 to-emerald-400/10',
+          ring: 'ring-emerald-400/40'
+        },{
+          label: 'Total Revenue',
+          value: stats.totalRevenue,
+          Icon: ChartBarIcon,
+          color: 'from-emerald-600/15 to-emerald-400/10',
+          ring: 'ring-emerald-400/40'
+        },{
+          label: 'Active Users',
+          value: stats.activeUsers,
+          Icon: UsersIcon,
+          color: 'from-emerald-600/15 to-emerald-400/10',
+          ring: 'ring-emerald-400/40'
+        }].map((card, i) => (
+          <div key={i} className={`relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br ${card.color} p-5 ring-1 ${card.ring}`}>
+            <card.Icon className="h-6 w-6 text-white/70" />
+            <div className="mt-3 text-2xl font-bold text-white">{card.value}</div>
+            <div className="text-sm text-white/70">{card.label}</div>
           </div>
+        ))}
+      </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5 flex items-center">
-                <AcademicCapIcon className="h-6 w-6 text-gray-400" />
-                <div className="ml-5 w-0 flex-1">
-                  <dl>
-                    <dt className="text-sm font-medium text-gray-500 truncate">Total Courses</dt>
-                    <dd className="text-lg font-medium text-gray-900">{stats.totalCourses}</dd>
-                  </dl>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5 flex items-center">
-                <UsersIcon className="h-6 w-6 text-gray-400" />
-                <div className="ml-5 w-0 flex-1">
-                  <dl>
-                    <dt className="text-sm font-medium text-gray-500 truncate">Total Students</dt>
-                    <dd className="text-lg font-medium text-gray-900">{stats.totalStudents}</dd>
-                  </dl>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5 flex items-center">
-                <ChartBarIcon className="h-6 w-6 text-gray-400" />
-                <div className="ml-5 w-0 flex-1">
-                  <dl>
-                    <dt className="text-sm font-medium text-gray-500 truncate">Total Revenue</dt>
-                    <dd className="text-lg font-medium text-gray-900">{stats.totalRevenue}</dd>
-                  </dl>
-                </div>
-              </div>
-            </div>
+      {/* Courses table */}
+      <div className="bg-white/5 border border-white/10 rounded-2xl mt-6 overflow-hidden">
+        <div className="px-4 py-4 border-b border-white/10 flex items-center justify-between">
+          <h2 className="text-white font-semibold">Courses</h2>
+          <div className="flex gap-2">
+            <button
+              onClick={() => navigate('/admin/help')}
+              className="px-3 py-2 text-sm rounded-lg bg-white/5 text-slate-200 border border-white/10 hover:bg-white/10"
+            >Help Desk</button>
+            <button
+              onClick={() => navigate('/admin/manual-payments')}
+              className="px-3 py-2 text-sm rounded-lg bg-amber-500/20 text-amber-200 border border-amber-400/30 hover:bg-amber-500/25"
+            >Manual Payments</button>
+            <button
+              onClick={() => navigate('/admin/create-course')}
+              className="px-3 py-2 text-sm rounded-lg bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 hover:bg-emerald-500/25"
+            >Create Course</button>
           </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full">
+            <thead>
+              <tr className="text-left text-xs uppercase tracking-wider text-slate-300">
+                <th className="px-6 py-3">Course</th>
+                <th className="px-6 py-3">Price</th>
+                <th className="px-6 py-3">Duration</th>
+                <th className="px-6 py-3">Status</th>
+                <th className="px-6 py-3">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/10">
+              {courses.map((course) => (
+                <tr key={course.id} className="text-slate-200">
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center">
+                      {course.thumbnail && (
+                        <img 
+                          src={course.thumbnail} 
+                          alt={course.title}
+                          className="h-10 w-10 rounded-lg object-cover mr-3"
+                        />
+                      )}
+                      <div>
+                        <div className="text-sm font-medium text-white">{course.title}</div>
+                        <div className="text-xs text-slate-400">{course.category}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">₹{course.price}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">{course.duration || 'N/A'} hrs</td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`px-2 py-1 text-xs font-medium rounded-full border ${
+                      course.status === 'active' 
+                        ? 'bg-emerald-500/15 text-emerald-200 border-emerald-400/30' 
+                        : 'bg-yellow-500/15 text-yellow-200 border-yellow-400/30'
+                    }`}>
+                      {course.status || 'inactive'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={() => navigate(`/admin/course/${course.id}/content`)}
+                        className="px-3 py-1.5 rounded-md bg-emerald-500/15 text-emerald-200 border border-emerald-400/30 hover:bg-emerald-500/25"
+                        title="Manage Course Content"
+                      >
+                        <FolderOpenIcon className="h-4 w-4 inline-block mr-1" />
+                        Content
+                      </button>
 
-          {/* Course List */}
-          <div className="bg-white shadow rounded-lg">
-            <div className="px-4 py-5 sm:p-6">
-              <h2 className="text-lg font-medium text-gray-900 mb-4">Courses</h2>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
+                      <button
+                        onClick={async () => {
+                          setSelectedCourseTitle(course.title);
+                          setEnrollmentsModalOpen(true);
+                          try {
+                            const res = await fetch(apiUrl(`/api/admin/courses/${course.id}/enrollments`), {
+                              headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+                            });
+                            if (!res.ok) throw new Error('Failed to fetch enrollments');
+                            const data = await res.json();
+                            setSelectedCourseEnrollments(data);
+                          } catch (err) {
+                            console.error('Failed to load enrollments:', err);
+                            toast.error('Failed to load enrollments');
+                          }
+                        }}
+                        className="px-3 py-1.5 rounded-md bg-indigo-500/15 text-indigo-200 border border-indigo-400/30 hover:bg-indigo-500/25"
+                      >
+                        Enrollments
+                      </button>
+
+                      <button
+                        onClick={() => navigate(`/admin/courses/${course.id}/upload`)}
+                        className="px-3 py-1.5 rounded-md bg-cyan-500/15 text-cyan-200 border border-cyan-400/30 hover:bg-cyan-500/25"
+                        title="Upload Course Content"
+                      >
+                        <CloudArrowUpIcon className="h-4 w-4 inline-block mr-1" />
+                        Upload
+                      </button>
+
+                      <button 
+                        onClick={() => navigate(`/admin/course/${course.id}/edit`)}
+                        className="px-3 py-1.5 rounded-md bg-white/5 text-slate-200 border border-white/10 hover:bg-white/10"
+                      >
+                        Edit
+                      </button>
+
+                      <button
+                        onClick={() => handleDeleteCourse(course.id)}
+                        className="px-3 py-1.5 rounded-md bg-red-500/15 text-red-200 border border-red-400/30 hover:bg-red-500/25"
+                        disabled={loading}
+                      >
+                        {loading ? 'Deleting...' : 'Delete'}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {courses.length === 0 && (
+            <div className="text-center py-12 text-slate-300">
+              <AcademicCapIcon className="mx-auto h-12 w-12 text-slate-500" />
+              <h3 className="mt-2 text-sm font-medium text-white">No courses</h3>
+              <p className="mt-1 text-sm text-slate-400">Get started by creating a new course.</p>
+              <div className="mt-6">
+                <button
+                  onClick={() => navigate('/admin/create-course')}
+                  className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-emerald-200 bg-emerald-500/20 border border-emerald-400/30 hover:bg-emerald-500/25"
+                >
+                  <PlusIcon className="h-5 w-5 mr-2" />
+                  Create Course
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Quick Actions */}
+      <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <button
+          onClick={() => navigate('/admin/create-course')}
+          className="neon-card flex items-center justify-center px-4 py-3 rounded-xl text-emerald-200 border border-emerald-400/20 hover:bg-emerald-500/10"
+        >
+          <PlusIcon className="h-6 w-6 mr-2" />
+          Create New Course
+        </button>
+        <button
+          onClick={() => {
+            if (courses.length > 0) navigate(`/admin/course/${courses[0].id}/content`);
+            else toast('Create a course first');
+          }}
+          className="neon-card flex items-center justify-center px-4 py-3 rounded-xl text-cyan-200 border border-cyan-400/20 hover:bg-cyan-500/10"
+        >
+          <CloudArrowUpIcon className="h-6 w-6 mr-2" />
+          Upload Content
+        </button>
+        <button
+          onClick={() => toast('Analytics coming soon')}
+          className="neon-card flex items-center justify-center px-4 py-3 rounded-xl text-fuchsia-200 border border-fuchsia-400/20 hover:bg-fuchsia-500/10"
+        >
+          <ChartBarIcon className="h-6 w-6 mr-2" />
+          View Analytics
+        </button>
+      </div>
+
+      {/* Enrollments modal */}
+      {enrollmentsModalOpen && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="w-11/12 max-w-3xl rounded-2xl border border-white/10 bg-slate-900 text-slate-200">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
+              <h3 className="text-lg font-semibold">Enrollments • {selectedCourseTitle}</h3>
+              <button onClick={() => setEnrollmentsModalOpen(false)} className="text-slate-400 hover:text-white">Close</button>
+            </div>
+            <div className="max-h-[60vh] overflow-auto p-4">
+              {selectedCourseEnrollments.length === 0 ? (
+                <div className="text-center text-slate-400 py-6">No enrollments</div>
+              ) : (
+                <table className="min-w-full text-sm">
+                  <thead className="text-left text-slate-300">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Course Name
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Price
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Duration
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Status
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Actions
-                      </th>
+                      <th className="px-4 py-2">User</th>
+                      <th className="px-4 py-2">Email</th>
+                      <th className="px-4 py-2">Status</th>
+                      <th className="px-4 py-2">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {courses.map((course) => (
-                      <tr key={course.id}>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            {course.thumbnail && (
-                              <img 
-                                src={course.thumbnail} 
-                                alt={course.title}
-                                className="h-10 w-10 rounded-lg object-cover mr-3"
-                              />
-                            )}
-                            <div>
-                              <div className="text-sm font-medium text-gray-900">{course.title}</div>
-                              <div className="text-sm text-gray-500">{course.category}</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">₹{course.price}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{course.duration || 'N/A'} hrs</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                            course.status === 'active' 
-                              ? 'bg-green-100 text-green-800' 
-                              : 'bg-yellow-100 text-yellow-800'
-                          }`}>
-                            {course.status || "inactive"}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center space-x-3">
-                            {/* Manage Content Button */}
-                            <button
-                              onClick={() => navigate(`/admin/course/${course.id}/content`)}
-                              className="inline-flex items-center px-3 py-1.5 bg-green-100 text-green-700 hover:bg-green-200 rounded-md text-sm font-medium transition-colors"
-                              title="Manage Course Content"
-                            >
-                              <FolderOpenIcon className="h-4 w-4 mr-1.5" />
-                              Content
-                            </button>
-
-                            {/* Upload Content Button */}
-                            <button
-                              onClick={() => navigate(`/admin/courses/${course.id}/upload`)}
-                              className="inline-flex items-center px-3 py-1.5 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-md text-sm font-medium transition-colors"
-                              title="Upload Course Content"
-                            >
-                              <CloudArrowUpIcon className="h-4 w-4 mr-1.5" />
-                              Upload
-                            </button>
-
-                            {/* Edit Button */}
-                            <button 
-                              onClick={() => navigate(`/admin/course/${course.id}/edit`)}
-                              className="text-indigo-600 hover:text-indigo-900 font-medium"
-                            >
-                              Edit
-                            </button>
-
-                            {/* Delete Button */}
-                            <button
-                              onClick={() => handleDeleteCourse(course.id)}
-                              className="text-red-600 hover:text-red-900 font-medium"
-                              disabled={loading}
-                            >
-                              {loading ? 'Deleting...' : 'Delete'}
-                            </button>
-                          </div>
+                  <tbody className="divide-y divide-white/10">
+                    {selectedCourseEnrollments.map(en => (
+                      <tr key={en.id}>
+                        <td className="px-4 py-2">{en.user?.full_name || en.user_id}</td>
+                        <td className="px-4 py-2">{en.user?.email || '-'}</td>
+                        <td className="px-4 py-2">{en.status}</td>
+                        <td className="px-4 py-2">
+                          <button className="px-3 py-1.5 rounded-md bg-red-500/15 text-red-200 border border-red-400/30 hover:bg-red-500/25" onClick={async () => {
+                            if (!confirm('Revoke enrollment?')) return;
+                            try {
+                              const res = await fetch(apiUrl(`/api/admin/enrollments/${en.id}`), {
+                                method: 'DELETE',
+                                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+                              });
+                              if (!res.ok) throw new Error('Failed to revoke');
+                              setSelectedCourseEnrollments(prev => prev.filter(x => x.id !== en.id));
+                              toast.success('Enrollment revoked');
+                            } catch (err) {
+                              console.error('Revoke error:', err);
+                              toast.error('Failed to revoke enrollment');
+                            }
+                          }}>Revoke</button>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-                {courses.length === 0 && (
-                  <div className="text-center py-12">
-                    <AcademicCapIcon className="mx-auto h-12 w-12 text-gray-400" />
-                    <h3 className="mt-2 text-sm font-medium text-gray-900">No courses</h3>
-                    <p className="mt-1 text-sm text-gray-500">Get started by creating a new course.</p>
-                    <div className="mt-6">
-                      <button
-                        onClick={() => navigate('/admin/create-course')}
-                        className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
-                      >
-                        <PlusIcon className="h-5 w-5 mr-2" />
-                        Create Course
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Quick Actions Panel */}
-          <div className="mt-8 bg-white shadow rounded-lg">
-            <div className="px-4 py-5 sm:p-6">
-              <h2 className="text-lg font-medium text-gray-900 mb-4">Quick Actions</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <button
-                  onClick={() => navigate('/admin/create-course')}
-                  className="flex items-center justify-center px-4 py-3 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-colors"
-                >
-                  <PlusIcon className="h-6 w-6 mr-2" />
-                  Create New Course
-                </button>
-                
-                <button
-                  onClick={() => {
-                    // Navigate to first available course's content page, or show a selection modal
-                    if (courses.length > 0) {
-                      navigate(`/admin/course/${courses[0].id}/content`);
-                    } else {
-                      alert('Please create a course first');
-                    }
-                  }}
-                  className="flex items-center justify-center px-4 py-3 bg-green-50 hover:bg-green-100 text-green-700 rounded-lg transition-colors"
-                >
-                  <CloudArrowUpIcon className="h-6 w-6 mr-2" />
-                  Upload Content
-                </button>
-                
-                <button
-                  onClick={() => {
-                    // Add analytics/reports navigation here
-                    alert('Analytics feature coming soon!');
-                  }}
-                  className="flex items-center justify-center px-4 py-3 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg transition-colors"
-                >
-                  <ChartBarIcon className="h-6 w-6 mr-2" />
-                  View Analytics
-                </button>
-              </div>
+              )}
             </div>
           </div>
         </div>
-      </div>
-    </div>
+      )}
+    </AdminLayout>
   );
 }
