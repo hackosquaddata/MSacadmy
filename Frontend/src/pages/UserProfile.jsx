@@ -43,8 +43,18 @@ const UserProfile = () => {
         throw new Error('Failed to fetch profile');
       }
 
-      const data = await response.json();
-      setProfile(data || {});
+      let data = null;
+      let isJson = false;
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        try {
+          data = await response.json();
+          isJson = true;
+        } catch (e) {
+          data = null;
+        }
+      }
+      setProfile(isJson && data ? data : {});
       // Fetch purchases in parallel once profile loads
       fetchPurchases();
     } catch (error) {

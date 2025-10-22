@@ -46,12 +46,21 @@ export default function Login() {
         }
       });
 
-      if (!userResponse.ok) {
+      let userData = null;
+      let isJson = false;
+      const contentType = userResponse.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        try {
+          userData = await userResponse.json();
+          isJson = true;
+        } catch (e) {
+          userData = null;
+        }
+      }
+      if (!userResponse.ok || !isJson || !userData || !userData.user) {
         throw new Error("Failed to fetch user details");
       }
 
-      const userData = await userResponse.json();
-      
       // Store user data in localStorage
       localStorage.setItem("user", JSON.stringify(userData.user));
 

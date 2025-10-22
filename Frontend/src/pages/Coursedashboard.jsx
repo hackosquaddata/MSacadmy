@@ -42,8 +42,18 @@ export default function CourseDashboard() {
         const res = await fetch(apiUrl('/api/auth/v1/me'), {
           headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
         });
-        if (!res.ok) return;
-        const data = await res.json();
+        const contentType = res.headers.get('content-type');
+        let data = null;
+        let isJson = false;
+        if (contentType && contentType.includes('application/json')) {
+          try {
+            data = await res.json();
+            isJson = true;
+          } catch (e) {
+            data = null;
+          }
+        }
+        if (!res.ok || !isJson || !data) return;
         setMe(data);
         const enrolledIds = (data.enrolled_courses || []).map(c => c.id);
         setEnrolledCourses(enrolledIds);
