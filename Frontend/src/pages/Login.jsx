@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
 import { apiUrl } from '../lib/api';
+import { supabase } from '../lib/supabaseClient';
 
 import BrandLogo from "../components/BrandLogo";
 
@@ -21,32 +22,26 @@ export default function Login() {
       setLoading(true);
       setError("");
 
-      const response = await fetch(apiUrl('/api/auth/v1/login'), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(values),
+      // Use supabase-js to sign in directly from the client (anon key)
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: values.email,
+        password: values.password
       });
 
-      const data = await response.json();
-      console.log("Login response:", data);
+      console.log('Supabase signIn response:', { data, error });
+      if (error) throw error;
 
-      if (!response.ok) {
-        throw new Error(data.message || "Login failed");
-      }
+      if (!data?.session?.access_token) throw new Error('No token received');
 
-      if (!data.token) {
-        throw new Error("No token received");
-      }
+      const token = data.session.access_token;
 
-      // Store the token
-      localStorage.setItem("token", data.token);
+  // Store the token
+  localStorage.setItem("token", token);
 
       // Now fetch the user details
       const userResponse = await fetch(apiUrl('/api/auth/v1/me'), {
         headers: {
-          "Authorization": `Bearer ${data.token}`,
+          "Authorization": `Bearer ${token}`,
           "Content-Type": "application/json"
         }
       });
