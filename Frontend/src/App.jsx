@@ -43,7 +43,13 @@ function App() {
           (() => {
             const token = localStorage.getItem('token');
             if (!token) return <Landing />;
-            const user = JSON.parse(localStorage.getItem('user') || '{}');
+            let user = {};
+            try {
+              const raw = localStorage.getItem('user');
+              user = raw ? JSON.parse(raw) : {};
+            } catch {
+              user = {};
+            }
             return user.is_admin === true ? <Navigate to="/admin/dashboard" replace /> : <Navigate to="/dashboard" replace />;
           })()
         } />

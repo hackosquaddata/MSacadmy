@@ -19,7 +19,12 @@ export default function Sidebar() {
 
   // Lightweight user info for avatar/initials
   const user = (() => {
-    try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; }
+    try {
+      const raw = localStorage.getItem('user');
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
   })();
   const displayName = user?.full_name || user?.email || 'User';
   const initials = (displayName?.match(/\b\w/g) || []).slice(0,2).join('').toUpperCase();

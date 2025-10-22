@@ -9,7 +9,13 @@ export default function PendingPaymentsOverlay() {
   const fetchPayments = async () => {
     try {
       // Fetch pending manual payments for the current user from Supabase directly
-      const userId = JSON.parse(localStorage.getItem('user'))?.id;
+      let userId = undefined;
+      try {
+        const raw = localStorage.getItem('user');
+        userId = raw ? JSON.parse(raw)?.id : undefined;
+      } catch {
+        userId = undefined;
+      }
       if (!userId) return setPayments([]);
       const { data, error } = await supabase
         .from('manual_payments')

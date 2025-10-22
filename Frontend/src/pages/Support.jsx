@@ -13,7 +13,12 @@ export default function Support() {
   const [reply, setReply] = useState('');
 
   const user = useMemo(() => {
-    try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; }
+    try {
+      const raw = localStorage.getItem('user');
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
   }, []);
   const token = localStorage.getItem('token');
 

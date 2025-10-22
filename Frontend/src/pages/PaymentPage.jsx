@@ -61,7 +61,13 @@ export default function PaymentPage() {
 	useEffect(() => {
 		// Prefill name/email from stored user to make it quicker
 		try {
-			const u = JSON.parse(localStorage.getItem('user') || '{}');
+			let u = {};
+			try {
+				const raw = localStorage.getItem('user');
+				u = raw ? JSON.parse(raw) : {};
+			} catch {
+				u = {};
+			}
 			setForm((prev) => ({
 				...prev,
 				name: prev.name || u.full_name || '',

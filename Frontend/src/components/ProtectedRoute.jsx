@@ -4,9 +4,14 @@ import { apiUrl } from '../lib/api';
 
 const ProtectedRoute = ({ children, adminOnly = false }) => {
   const token = localStorage.getItem('token');
-  const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+  let storedUser = {};
+  try {
+    const raw = localStorage.getItem('user');
+    storedUser = raw ? JSON.parse(raw) : {};
+  } catch {
+    storedUser = {};
+  }
   const location = useLocation();
-  
   // Handle both data structures (nested user object and direct user data)
   const user = storedUser.user || storedUser;
   console.log('Protected Route - User Data:', user);

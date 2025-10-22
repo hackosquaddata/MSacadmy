@@ -6,7 +6,12 @@ import { apiUrl } from '../lib/api';
 export default function AdminHelp() {
   const token = localStorage.getItem('token');
   const user = useMemo(() => {
-    try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; }
+    try {
+      const raw = localStorage.getItem('user');
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
   }, []);
 
   const [tickets, setTickets] = useState([]);
