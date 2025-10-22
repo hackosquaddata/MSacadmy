@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import Sidebar from '../components/Sidebar';
 import CourseCard from '../components/CourseCard';
 import { MagnifyingGlassIcon, SparklesIcon } from '@heroicons/react/24/outline';
-import { apiUrl } from '../lib/api';
+import { supabase } from '../lib/supabaseClient';
 
 export default function CourseDashboard() {
   const [courses, setCourses] = useState([]);
@@ -22,30 +22,19 @@ export default function CourseDashboard() {
   useEffect(() => {
     const fetchCourses = async () => {
       try {
-        const token = localStorage.getItem("token");
-
-        const res = await fetch(apiUrl('/api/auth/v1/courses'), {
-          method:"GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        const data = await res.json();
-
-        if (res.ok) {
-          setCourses(data);
-          setFiltered(data);
-        } else {
-          setError(data.error || "Failed to fetch courses");
-        }
+        setLoading(true);
+        setError(null);
+        // Fetch all courses from Supabase directly
+        const { data, error } = await supabase.from('courses').select('*');
+        if (error) throw error;
+        setCourses(data || []);
+        setFiltered(data || []);
       } catch (err) {
-        setError("Something went wrong while fetching courses");
+        setError(err.message || "Something went wrong while fetching courses");
       } finally {
         setLoading(false);
       }
     };
-
     fetchCourses();
     // fetch current user to get enrolled courses and profile
     const fetchMe = async () => {

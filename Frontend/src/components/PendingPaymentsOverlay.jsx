@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { apiUrl } from '../lib/api';
+import { supabase } from '../lib/supabaseClient';
 
 export default function PendingPaymentsOverlay() {
   const [payments, setPayments] = useState([]);
@@ -8,14 +8,17 @@ export default function PendingPaymentsOverlay() {
 
   const fetchPayments = async () => {
     try {
-      const res = await fetch(apiUrl('/api/payments/mine'), {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      });
-      if (!res.ok) return setPayments([]);
-      const data = await res.json();
-      // Only show payments that are still pending verification
-      const pending = (data || []).filter(p => (p.status || '').toLowerCase() === 'pending');
-      setPayments(pending);
+      // Fetch pending manual payments for the current user from Supabase directly
+      const userId = JSON.parse(localStorage.getItem('user'))?.id;
+      if (!userId) return setPayments([]);
+      const { data, error } = await supabase
+        .from('manual_payments')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setPayments(data || []);
     } catch (err) {
       console.error('Failed to fetch user manual payments:', err);
     }

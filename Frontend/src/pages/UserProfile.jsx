@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import Sidebar from '../components/Sidebar';
 import { apiUrl } from '../lib/api';
+import { supabase } from '../lib/supabaseClient';
 import {
   UserCircleIcon,
   EnvelopeIcon,
@@ -57,12 +58,15 @@ const UserProfile = () => {
   const fetchPurchases = async () => {
     try {
       setLoadingPurchases(true);
-      const token = localStorage.getItem('token');
-        const res = await fetch(apiUrl('/api/payments/mine'), {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await res.json().catch(() => []);
-      if (!res.ok) throw new Error(data?.message || 'Failed to load purchases');
+      // Fetch payments for the current user from Supabase directly
+      const user = profile?.user || profile;
+      if (!user?.id) return setPurchases([]);
+      const { data, error } = await supabase
+        .from('manual_payments')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
       setPurchases(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error('Purchases fetch error:', e);
